@@ -1,0 +1,47 @@
+This unittest framework is borrowed from OCE (see
+https://github.com/tpaviot/oce). It's nearly identical to the unittest
+framework used in HeeksCAD.
+
+In order to run these tests, first compile Google Test from the source code
+available in the folder "heekscnc/unittest/gtest-1.6.0" like so:
+
+$ cd unittest/gtest-1.6.0/lib
+$ cmake ..
+$ make
+
+Afterward, the CMake builder should find the proper Google Test library and
+headers locations. After building HeeksCNC as usual, the tests can be run using
+the following command:
+
+$ make test
+
+Or to run a single test, "cd" into its directory, and then type "make test".
+For example, to run the "gtest_sandbox" test, do the following:
+
+$ cd unittest/gtest_sandbox/
+$ make test
+
+Two things to note:
+- The HeeksCAD unittest framework uses the compile flag "-DUNITTEST_NO_HEEKS",
+  and corresponding "#ifdef UNITTEST_NO_HEEKS" in HeeksCAD header files in
+  order to work around hardwired dependencies by *not* in turn including
+  certain other header files when UNITTEST_NO_HEEKS is #defined. This is nice
+  because it permits unit testing without having to first refactor HeeksCNC. On
+  the other hand, it changes the behavior of the code that's being tested,
+  which means we're not unit-testing the code that's used in HeeksCNC, just
+  something that's really similar to it.  This should be fine, as long as we
+  keep this in mind when we encounter behavior that differs between actual use,
+  and use in testcases.
+- HeeksCAD unit tests compile their own copies of the relevant source files. For
+  now we'll do the same here. Ideally, in the future we'll change this, and
+  instead link against the heekscnc library to create the testing executables.
+
+There is a template test suite inside of "unittest/gtest_sandbox". The
+important files to copy are "CMakeLists.txt" and "sandbox.cpp".
+
+To make a new unit test, first create a new directory "unittest/<name>_test/"
+to contain your test code (replacing "<name>" with the name of your new test),
+and then copy "CMakeLists.txt" and "sandbox.cpp" into "unittest/<name>_test/"
+and modify as needed. You can rename "sandbox.cpp" to anything ending with
+".cpp". The directory "unittest/<name>_test/" can have any name ending with
+"_test".
