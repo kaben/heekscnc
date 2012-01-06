@@ -5,10 +5,7 @@
 #endif
 
 #include "src/Contour.h"
-#include <TopoDS_Edge.hxx>
-#include <functional>
-#include <algorithm>
-#include <vector>
+#include <BRepBuilderAPI_MakeEdge.hxx>
 
 using namespace std;
 
@@ -52,35 +49,28 @@ TEST(TestSuite, testIntegerLighter)
     EXPECT_LT(a,b);
 }
 
-struct EdgeComparison : public binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >
+TEST(EdgeComparisonTestSuite, testInstantiation)
 {
-    EdgeComparison( const TopoDS_Edge & edge )
-    {
-        m_reference_edge = edge;
-    }
+    EdgeComparison x(BRepBuilderAPI_MakeEdge(gp_Pnt(0,0,0), gp_Pnt(1,0,0)));
+}
 
-    bool operator()( const TopoDS_Edge & lhs, const TopoDS_Edge & rhs ) const
-    {
-
-        std::vector<double> lhs_distances;
-        lhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetStart(lhs) ) );
-        lhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetEnd(lhs) ) );
-        lhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetStart(lhs) ) );
-        lhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetEnd(lhs) ) );
-        std::sort(lhs_distances.begin(), lhs_distances.end());
-
-        std::vector<double> rhs_distances;
-        rhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetStart(rhs) ) );
-        rhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetEnd(rhs) ) );
-        rhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetStart(rhs) ) );
-        rhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetEnd(rhs) ) );
-        std::sort(rhs_distances.begin(), rhs_distances.end());
-
-        return(*(lhs_distances.begin()) < *(rhs_distances.begin()));
-    }
-
-    TopoDS_Edge m_reference_edge;
-};
+TEST(EdgeComparisonTestSuite, testComparison)
+{
+    /*
+    Three edges:
+    - comparison edge O from (0,0,0) to (1,0,0)
+    - edge A from ((0,1,0), (1,1,0))
+    - edge B from ((0,2,0), (1,2,0))
+    A should be closer to O than B.
+    */
+    gp_Pnt p000(0,0,0), p100(1,0,0), p010(0,1,0), p110(1,1,0), p020(0,2,0), p120(1,2,0);
+    TopoDS_Edge O(BRepBuilderAPI_MakeEdge(p000, p100));
+    TopoDS_Edge A(BRepBuilderAPI_MakeEdge(p010, p110));
+    TopoDS_Edge B(BRepBuilderAPI_MakeEdge(p020, p120));
+    EdgeComparison edge_comparison(O);
+    EXPECT_TRUE(edge_comparison(A,B));
+    EXPECT_FALSE(edge_comparison(B,A));
+}
 
 
 // Run all the tests that were declared with TEST()
