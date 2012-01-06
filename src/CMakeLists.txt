@@ -77,7 +77,8 @@ set( heekscnc_SRCS
     BOM.cpp          Drilling.cpp           Op.cpp             PythonStuff.cpp      Tapping.cpp
     Chamfer.cpp      Operations.cpp         Tools.cpp
     CNCPoint.cpp     Excellon.cpp           OutputCanvas.cpp   RawMaterial.cpp      TrsfNCCode.cpp
-    Contour.cpp      Fixture.cpp            Pocket.cpp         Reselect.cpp         TurnRough.cpp
+    Contour.cpp      ContourStatics.cpp     Fixture.cpp        Pocket.cpp           Reselect.cpp
+    TurnRough.cpp
     CounterBore.cpp  Fixtures.cpp           PocketDlg.cpp      ScriptOp.cpp         Waterline.cpp
     CTool.cpp        HeeksCNC.cpp           Positioning.cpp    SpeedOp.cpp          ZigZag.cpp
     CToolDlg.cpp     HeeksCNCInterface.cpp  Probing.cpp        SpeedReference.cpp

@@ -216,64 +216,11 @@ const wxBitmap &CContour::GetIcon()
 }
 
 
-/* static */ CNCPoint CContour::GetStart(const TopoDS_Edge &edge)
-{
-    BRepAdaptor_Curve curve(edge);
-    double uStart = curve.FirstParameter();
-    gp_Pnt PS;
-    gp_Vec VS;
-    curve.D1(uStart, PS, VS);
-
-    return(PS);
-}
-
-/* static */ CNCPoint CContour::GetEnd(const TopoDS_Edge &edge)
-{
-    BRepAdaptor_Curve curve(edge);
-    double uEnd = curve.LastParameter();
-    gp_Pnt PE;
-    gp_Vec VE;
-    curve.D1(uEnd, PE, VE);
-
-    return(PE);
-}
-
 /* static */ double CContour::GetLength(const TopoDS_Edge &edge)
 {
     BRepAdaptor_Curve curve(edge);
     return(GCPnts_AbscissaPoint::Length(curve));
 }
-
-
-struct EdgeComparison : public binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >
-{
-    EdgeComparison( const TopoDS_Edge & edge )
-    {
-        m_reference_edge = edge;
-    }
-
-    bool operator()( const TopoDS_Edge & lhs, const TopoDS_Edge & rhs ) const
-    {
-
-        std::vector<double> lhs_distances;
-        lhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetStart(lhs) ) );
-        lhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetEnd(lhs) ) );
-        lhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetStart(lhs) ) );
-        lhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetEnd(lhs) ) );
-        std::sort(lhs_distances.begin(), lhs_distances.end());
-
-        std::vector<double> rhs_distances;
-        rhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetStart(rhs) ) );
-        rhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetEnd(rhs) ) );
-        rhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetStart(rhs) ) );
-        rhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetEnd(rhs) ) );
-        std::sort(rhs_distances.begin(), rhs_distances.end());
-
-        return(*(lhs_distances.begin()) < *(rhs_distances.begin()));
-    }
-
-    TopoDS_Edge m_reference_edge;
-};
 
 /* static */ std::vector<TopoDS_Edge> CContour::SortEdges( const TopoDS_Wire & wire )
 {

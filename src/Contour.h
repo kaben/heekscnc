@@ -16,6 +16,12 @@
 #ifndef HeeksCNCTypes_h
 #include "HeeksCNCTypes.h"
 #endif
+#ifndef _GLIBCXX_ALGORITHM
+#include <algorithm>
+#endif
+#ifndef _GLIBCXX_FUNCTIONAL
+#include <functional>
+#endif
 #ifndef _GLIBCXX_LIST
 #include <list>
 #endif
@@ -216,9 +222,42 @@ public:
 	static bool EdgesJoin( const TopoDS_Edge &a, const TopoDS_Edge &b );
 
 public:
-	static CNCPoint GetStart(const TopoDS_Edge &edge);
-    static CNCPoint GetEnd(const TopoDS_Edge &edge);
+	  static CNCPoint GetStart(const TopoDS_Edge &edge) { return CContour::_GetStart(edge); }
+    static CNCPoint GetEnd(const TopoDS_Edge &edge) { return CContour::_GetEnd(edge); }
+	  static gp_Pnt _GetStart(const TopoDS_Edge &edge);
+    static gp_Pnt _GetEnd(const TopoDS_Edge &edge);
     static double GetLength(const TopoDS_Edge &edge);
+};
+
+
+struct EdgeComparison : public std::binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >
+{
+    EdgeComparison( const TopoDS_Edge & edge )
+    {
+        m_reference_edge = edge;
+    }
+
+    bool operator()( const TopoDS_Edge & lhs, const TopoDS_Edge & rhs ) const
+    {
+
+        std::vector<double> lhs_distances;
+        lhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetStart(lhs) ) );
+        lhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetEnd(lhs) ) );
+        lhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetStart(lhs) ) );
+        lhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetEnd(lhs) ) );
+        std::sort(lhs_distances.begin(), lhs_distances.end());
+
+        std::vector<double> rhs_distances;
+        rhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetStart(rhs) ) );
+        rhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetEnd(rhs) ) );
+        rhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetStart(rhs) ) );
+        rhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetEnd(rhs) ) );
+        std::sort(rhs_distances.begin(), rhs_distances.end());
+
+        return(*(lhs_distances.begin()) < *(rhs_distances.begin()));
+    }
+
+    TopoDS_Edge m_reference_edge;
 };
 
 
