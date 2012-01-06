@@ -68,8 +68,12 @@ TEST(EdgeComparisonTestSuite, testComparison)
     TopoDS_Edge A(BRepBuilderAPI_MakeEdge(p010, p110));
     TopoDS_Edge B(BRepBuilderAPI_MakeEdge(p020, p120));
     EdgeComparison edge_comparison(O);
+    /* True indicates A is closer to O than B. */
     EXPECT_TRUE(edge_comparison(A,B));
+    /* False indicates B is not closer to O than A. */
     EXPECT_FALSE(edge_comparison(B,A));
+    /* False indicates A is not closer to O than A. Which makes sense. */
+    EXPECT_FALSE(edge_comparison(A,A));
 }
 
 
