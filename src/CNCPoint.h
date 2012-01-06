@@ -6,6 +6,7 @@
  */
 
 #pragma once
+#ifndef CNCPoint_h
 
 #include <list>
 #include <vector>
@@ -121,4 +122,4 @@ private:
 
 
 
-
+#endif

@@ -10,13 +10,27 @@
  */
 #ifndef STABLE_OPS_ONLY
 
+#ifndef DEPTH_OP_HEADER
 #include "DepthOp.h"
+#endif
+#ifndef HeeksCNCTypes_h
 #include "HeeksCNCTypes.h"
+#endif
+#ifndef _GLIBCXX_LIST
 #include <list>
+#endif
+#ifndef _GLIBCXX_VECTOR
 #include <vector>
+#endif
+#ifndef CNCPoint_h
 #include "CNCPoint.h"
+#endif
+#ifndef _TopoDS_Wire_HeaderFile
 #include <TopoDS_Wire.hxx>
+#endif
+#ifndef _TopoDS_Edge_HeaderFile
 #include <TopoDS_Edge.hxx>
+#endif
 
 
 class CContour;

@@ -2,6 +2,7 @@
 // HeeksCNCTypes.h
 
 #pragma once
+#ifndef HeeksCNCTypes_h
 
 // NOTE: If adding to this enumeration, please also update the HeeksCNCType() routine.
 
@@ -41,3 +42,5 @@ enum{
 	TappingType,
 	HeeksCNCMaximumType
 };
+
+#endif

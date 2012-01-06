@@ -59,6 +59,8 @@
 #include "ScriptOp.h"
 #include "AttachOp.h"
 
+#include "interface/TestMacros.h"
+
 #include <sstream>
 
 CHeeksCADInterface* heeksCAD = NULL;
@@ -84,6 +86,7 @@ CHeeksCNCApp::CHeeksCNCApp(){
 	m_machiningBar = NULL;
 	m_icon_texture_number = 0;
 	m_machining_hidden = false;
+	printf(DBG_DATETIME_NOTE("Initialized.\n"));
 }
 
 CHeeksCNCApp::~CHeeksCNCApp(){
