@@ -5,11 +5,15 @@
 #endif
 
 #include "src/Contour.h"
+#include <TopoDS_Edge.hxx>
+#include <functional>
+#include <algorithm>
+#include <vector>
+
+using namespace std;
 
 
 /*
-Modify this file to test gtest features, assertions etc.
-
 This example demonstrates how to use gtest to conduct C++ unittesting
 with CTest/CMake.
 A TestSuite is by definition composed of several testCases.
@@ -47,6 +51,37 @@ TEST(TestSuite, testIntegerLighter)
     int a=1,b=2;
     EXPECT_LT(a,b);
 }
+
+struct EdgeComparison : public binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >
+{
+    EdgeComparison( const TopoDS_Edge & edge )
+    {
+        m_reference_edge = edge;
+    }
+
+    bool operator()( const TopoDS_Edge & lhs, const TopoDS_Edge & rhs ) const
+    {
+
+        std::vector<double> lhs_distances;
+        lhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetStart(lhs) ) );
+        lhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetEnd(lhs) ) );
+        lhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetStart(lhs) ) );
+        lhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetEnd(lhs) ) );
+        std::sort(lhs_distances.begin(), lhs_distances.end());
+
+        std::vector<double> rhs_distances;
+        rhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetStart(rhs) ) );
+        rhs_distances.push_back( CContour::GetStart(m_reference_edge).Distance( CContour::GetEnd(rhs) ) );
+        rhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetStart(rhs) ) );
+        rhs_distances.push_back( CContour::GetEnd(m_reference_edge).Distance( CContour::GetEnd(rhs) ) );
+        std::sort(rhs_distances.begin(), rhs_distances.end());
+
+        return(*(lhs_distances.begin()) < *(rhs_distances.begin()));
+    }
+
+    TopoDS_Edge m_reference_edge;
+};
+
 
 // Run all the tests that were declared with TEST()
 int main(int argc, char **argv){
