@@ -1,0 +1,7 @@
+FILE(GLOB TEST_SOURCES *.cpp)
+SET(SOURCE_FILES ${TEST_SOURCES})
+INCLUDE_DIRECTORIES("." ${HeeksCadDir})
+
+ADD_EXECUTABLE(brainstorm_test ${SOURCE_FILES})
+TARGET_LINK_LIBRARIES(brainstorm_test gcov ${GTEST_LIBRARY} ${GTEST_MAIN_LIBRARY} ${wxWidgets_LIBRARIES}  ${OpenCASCADE_LIBRARIES} )
+ADD_TEST(brainstorm_test brainstorm_test)

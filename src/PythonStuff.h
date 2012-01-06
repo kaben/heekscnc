@@ -5,7 +5,12 @@ class CBox;
 class CProgram;
 
 #include "PythonString.h"
+#ifndef _WX_PROCESSH__
 #include <wx/process.h>
+#endif
+#ifndef _WX_TIMER_H_BASE_
+#include <wx/timer.h>
+#endif
 
 class CPyProcess : public wxProcess
 {
