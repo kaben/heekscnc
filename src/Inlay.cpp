@@ -29,6 +29,8 @@
 #include "MachineState.h"
 #include "Program.h"
 
+#include "interface/TestMacros.h"
+
 #include <sstream>
 #include <iomanip>
 #include <vector>
@@ -301,6 +303,8 @@ const wxBitmap &CInlay::GetIcon()
 
 Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 {
+	printf(DBG_NOTE("Hi!\n"));
+
     Python python;
 
 	ReloadPointers();

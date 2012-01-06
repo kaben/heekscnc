@@ -76,3 +76,33 @@ set_directory_properties( PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${CPACK_PACKAG
 
 #------------- include(CPack) should be the last line in this file
 include(CPack)
+
+############################################
+# UnitTesting CMake code borrowed from OCE #
+# See https://github.com/tpaviot/oce       #
+############################################
+# Define helper macro OPTION_WITH_DEFAULT
+MACRO( OPTION_WITH_DEFAULT OPTION_NAME OPTION_STRING OPTION_DEFAULT )
+	IF( NOT DEFINED ${OPTION_NAME} )
+		SET( ${OPTION_NAME} ${OPTION_DEFAULT} )
+	ENDIF( NOT DEFINED ${OPTION_NAME} )
+	OPTION( ${OPTION_NAME} "${OPTION_STRING}" ${${OPTION_NAME}} )
+ENDMACRO( OPTION_WITH_DEFAULT OPTION_NAME OPTION_STRING OPTION_DEFAULT )
+OPTION_WITH_DEFAULT( ${PROJECT_NAME}_TESTING "Enable unittesting framework" OFF )
+MARK_AS_ADVANCED(${PROJECT_NAME}_TESTING)
+IF(${PROJECT_NAME}_TESTING)
+	SET( ${PROJECT_NAME}_EXTRA_WARNINGS ON CACHE BOOL "Extra warnings required by testing framework" FORCE)
+	INCLUDE(CTest)
+	ENABLE_TESTING()
+	SUBDIRS(unittest)
+ENDIF(${PROJECT_NAME}_TESTING)
+IF(${PROJECT_NAME}_COVERAGE)
+	SET(${PROJECT_NAME}_TESTING ON CACHE BOOL "Testing enabled by coverage option" FORCE)
+	# build static libs, better coverage report
+	SET( ${PROJECT_NAME}_BUILD_SHARED_LIB OFF CACHE BOOL "Build static libs" FORCE )
+	SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fprofile-arcs -ftest-coverage" CACHE STRING "Extra compile flags required by code coverage" FORCE)
+	SET(CMAKE_C_FLAGS_DEBUG "-O0 -g -fprofile-arcs -ftest-coverage" CACHE STRING "Extra compile flags required by code coverage" FORCE)
+	SET(CMAKE_MODULE_LINKER_FLAGS_DEBUG "-fprofile-arcs -ftest-coverage" CACHE STRING "Extra linker flags required by code coverage" FORCE)
+	SET(${PROJECT_NAME}_BUILD_TYPE "Debug" CACHE STRING "Build type required by testing framework" FORCE)
+ENDIF(${PROJECT_NAME}_COVERAGE)
+
