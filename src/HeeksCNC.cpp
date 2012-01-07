@@ -86,7 +86,7 @@ CHeeksCNCApp::CHeeksCNCApp(){
 	m_machiningBar = NULL;
 	m_icon_texture_number = 0;
 	m_machining_hidden = false;
-	printf(DBG_DATETIME_NOTE("Initialized.\n"));
+	printf(DBG_NOTE("HeeksCNC compiled " __TIME__ ", "__DATE__".\n"));
 }
 
 CHeeksCNCApp::~CHeeksCNCApp(){
