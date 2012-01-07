@@ -484,18 +484,18 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 		}
 	} // End for
 
-	// reorder the area, the outside curves must be made anti-clockwise and the insides clockwise
-	python << _T("a.Reorder()\n");
-
-	// start - assume we are at a suitable clearance height
-
-	// make a parameter of area_funcs.pocket() eventually
-	// 0..plunge, 1..ramp, 2..helical
-	python << _T("entry_style = ") <<  m_pocket_params.m_entry_move << _T("\n");
-
 	// Pocket the area
   if (0 < num_curves)
   {
+	  // reorder the area, the outside curves must be made anti-clockwise and the insides clockwise
+	  python << _T("a.Reorder()\n");
+
+	  // start - assume we are at a suitable clearance height
+
+	  // make a parameter of area_funcs.pocket() eventually
+	  // 0..plunge, 1..ramp, 2..helical
+	  python << _T("entry_style = ") <<  m_pocket_params.m_entry_move << _T("\n");
+
 		python << _T("area_funcs.pocket(a, tool_diameter/2, ");
 		python << m_pocket_params.m_material_allowance / theApp.m_program->m_units;
 		python << _T(", rapid_safety_space, start_depth, final_depth, ");
