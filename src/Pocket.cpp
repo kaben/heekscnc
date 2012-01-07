@@ -197,7 +197,7 @@ void CPocketParams::ReadFromXMLElement(TiXmlElement* pElem)
 //	} // End for
 //	gcode << _T("a.append(c)\n");
 //}
-static wxString WriteSketchDefn(HeeksObj* sketch, CMachineState *pMachineState)
+static wxString WriteSketchDefn(HeeksObj* sketch, CMachineState *pMachineState, int &num_curves)
 {
 #ifdef UNICODE
 	std::wostringstream gcode;
@@ -248,6 +248,7 @@ static wxString WriteSketchDefn(HeeksObj* sketch, CMachineState *pMachineState)
 				{
 					gcode << _T("a.append(c)\n");
 					started = false;
+          num_curves++;
 				}
 
 				if(!started)
@@ -292,6 +293,7 @@ static wxString WriteSketchDefn(HeeksObj* sketch, CMachineState *pMachineState)
 					{
 						gcode << _T("a.append(c)\n");
 						started = false;
+            num_curves++;
 					}
 
 					std::list< std::pair<int, gp_Pnt > > points;
@@ -327,6 +329,7 @@ static wxString WriteSketchDefn(HeeksObj* sketch, CMachineState *pMachineState)
 						gcode << _T("), area.Point(") << centre.X(true) << _T(", ") << centre.Y(true) << _T(")))\n");
 					} // End for
 					gcode << _T("a.append(c)\n");
+          num_curves++;
 				}
 			} // End if - else
 		}
@@ -336,6 +339,7 @@ static wxString WriteSketchDefn(HeeksObj* sketch, CMachineState *pMachineState)
 	{
 		gcode << _T("a.append(c)\n");
 		started = false;
+    num_curves++;
 	}
 
 	// delete the spans made
@@ -360,6 +364,7 @@ const wxBitmap &CPocket::GetIcon()
 Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 {
 	Python python;
+  int num_curves = 0;
 
 #ifdef OP_SKETCHES_AS_CHILDREN
 	ReloadPointers();   // Make sure all the m_sketches values have been converted into children.
@@ -470,7 +475,7 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 
 		if(object)
 		{
-			python << WriteSketchDefn(object, pMachineState);
+			python << WriteSketchDefn(object, pMachineState, num_curves);
 		}
 
 		if(re_ordered_sketch)
@@ -489,17 +494,30 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 	python << _T("entry_style = ") <<  m_pocket_params.m_entry_move << _T("\n");
 
 	// Pocket the area
-	python << _T("area_funcs.pocket(a, tool_diameter/2, ");
-	python << m_pocket_params.m_material_allowance / theApp.m_program->m_units;
-	python << _T(", rapid_safety_space, start_depth, final_depth, ");
-	python << m_pocket_params.m_step_over / theApp.m_program->m_units;
-	python << _T(", step_down, clearance, ");
-	python << m_pocket_params.m_starting_place;
-	python << (m_pocket_params.m_keep_tool_down_if_poss ? _T(", True") : _T(", False"));
-	python << (m_pocket_params.m_use_zig_zag ? _T(", True") : _T(", False"));
-	python << _T(", ") << m_pocket_params.m_zig_angle;
-	python << _T(",") << (m_pocket_params.m_zig_unidirectional ? _T("True") : _T("False"));
-	python << _T(")\n");
+  if (0 < num_curves)
+  {
+		python << _T("area_funcs.pocket(a, tool_diameter/2, ");
+		python << m_pocket_params.m_material_allowance / theApp.m_program->m_units;
+		python << _T(", rapid_safety_space, start_depth, final_depth, ");
+		python << m_pocket_params.m_step_over / theApp.m_program->m_units;
+		python << _T(", step_down, clearance, ");
+		python << m_pocket_params.m_starting_place;
+		python << (m_pocket_params.m_keep_tool_down_if_poss ? _T(", True") : _T(", False"));
+		python << (m_pocket_params.m_use_zig_zag ? _T(", True") : _T(", False"));
+		python << _T(", ") << m_pocket_params.m_zig_angle;
+		python << _T(",") << (m_pocket_params.m_zig_unidirectional ? _T("True") : _T("False"));
+		python << _T(")\n");
+  }
+  else
+  {
+		python << _T("\n");
+		python << _T("comment('In the python code that generated this gcode,')\n");
+		python << _T("comment('an area was created that lacks sufficient curves')\n");
+		python << _T("comment('to successfully call the pocketing function,')\n");
+		python << _T("comment('wherefore I refuse cowardly to even try')\n");
+		python << _T("comment('because I think I might crash if I do.')\n");
+		python << _T("\n");
+  }
 
 	// rapid back up to clearance plane
 	python << _T("rapid(z = clearance)\n");
