@@ -29,6 +29,9 @@
 #include "MachineState.h"
 #include "Program.h"
 
+#include "Area.h"
+#include "Curve.h"
+
 #include "interface/TestMacros.h"
 
 #include <sstream>
@@ -304,7 +307,12 @@ const wxBitmap &CInlay::GetIcon()
 
 Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 {
-	printf(DBG_NOTE("Hi!\n"));
+	dprintf("Hi!\n");
+	dprintf("instantiating CArea ...\n");
+    {
+        CArea a;
+    }
+	dprintf("... done instantiating CArea.\n");
 
     Python python;
 
@@ -900,7 +908,7 @@ Python CInlay::FormCorners( Valley_t & paths, CMachineState *pMachineState ) con
  */
 CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 {
-	printf(DBG_NOTE("entered ...\n"));
+	dprintf("entered ...\n");
 
 	Valleys_t valleys;
 	ReloadPointers();
@@ -911,40 +919,40 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
     // For all selected sketches.
 	int num_children = GetNumChildren();
 	int child_num = 0;
-	printf(DBG_NOTE("iterating through %d children ...\n"), num_children);
+	dprintf("iterating through %d children ...\n", num_children);
 	for (HeeksObj *object = GetFirstChild(); object != NULL; object = GetNextChild())
 	{
 		child_num++;
-	    printf(DBG_NOTE("(child_num %d/%d) considering new child ...\n"), child_num, num_children);
+	    dprintf("(child_num %d/%d) considering new child ...\n", child_num, num_children);
 		if (object->GetType() != SketchType)
 		{
 			//printf("Skipping non-sketch child\n");
-	    printf(DBG_NOTE("(child_num %d/%d) skipping non-sketch child ...\n"), child_num, num_children);
+	    dprintf("(child_num %d/%d) skipping non-sketch child ...\n", child_num, num_children);
 			continue;
 		}
 
 	    // Convert them to a list of wire objects.
-	    printf(DBG_NOTE("(child_num %d/%d) converting to list of wires ...\n"), child_num, num_children);
+	    dprintf("(child_num %d/%d) converting to list of wires ...\n", child_num, num_children);
 		std::list<TopoDS_Shape> wires;
-	    printf(DBG_NOTE("(child_num %d/%d) ConvertSketchToFaceOrWire() ...\n"), child_num, num_children);
+	    dprintf("(child_num %d/%d) ConvertSketchToFaceOrWire() ...\n", child_num, num_children);
 		if (heeksCAD->ConvertSketchToFaceOrWire( object, wires, false))
 		{
 			// The wire(s) represent the sketch objects for a tool path.
 			int num_wires = wires.size();
 			int wire_num = 0;
-	        printf(DBG_NOTE("(child_num %d/%d) iterating through %d wires ...\n"), child_num, num_children, num_wires);
+	        dprintf("(child_num %d/%d) iterating through %d wires ...\n", child_num, num_children, num_wires);
 			try {
 			    // For all wires in this sketch...
 				for(std::list<TopoDS_Shape>::iterator It2 = wires.begin(); It2 != wires.end(); It2++)
 				{
 					wire_num++;
-	        printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) fixing wire order ...\n"), child_num, num_children, wire_num, num_wires);
+	        dprintf("(child_num %d/%d) (wire_num %d/%d) fixing wire order ...\n", child_num, num_children, wire_num, num_wires);
 					TopoDS_Shape& wire_to_fix = *It2;
 					ShapeFix_Wire fix;
 					fix.Load( TopoDS::Wire(wire_to_fix) );
 					fix.FixReorder();
 
-	                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) converting fix back to wire ...\n"), child_num, num_children, wire_num, num_wires);
+	                dprintf("(child_num %d/%d) (wire_num %d/%d) converting fix back to wire ...\n", child_num, num_children, wire_num, num_wires);
 					TopoDS_Shape wire = fix.Wire();
 
 					// DO NOT align wires with the fixture YET.  When we form
@@ -963,7 +971,7 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
                     double max_offset = (m_depth_op_params.m_start_depth - m_depth_op_params.m_final_depth) * tan(angle);
 
                     // If this is too far for this sketch's geometry, figure out what the maximum offset is.
-	                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) FindMaxOffset(...) ...\n"), child_num, num_children, wire_num, num_wires);
+	                dprintf("(child_num %d/%d) (wire_num %d/%d) FindMaxOffset(...) ...\n", child_num, num_children, wire_num, num_wires);
                     ShapeAnalysis_Wire analysis;
                     analysis.Load(fix.Wire());
                     max_offset = FindMaxOffset( max_offset, TopoDS::Wire(wire), m_depth_op_params.m_step_down * tan(angle) / 10.0 );
@@ -1000,10 +1008,10 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 					Depths_t depths;
 
                     // machine at this depth around the wire in ever increasing loops until we hit the outside wire (offset = 0)
-	                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) machining around this wire in ever increasing loops until we hit outside wire ...\n"), child_num, num_children, wire_num, num_wires);
+	                dprintf("(child_num %d/%d) (wire_num %d/%d) machining around this wire in ever increasing loops until we hit outside wire ...\n", child_num, num_children, wire_num, num_wires);
                     for (double offset = max_offset; offset >= tolerance; /* decrement within loop */ )
                     {
-	                    printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) next loop ...\n"), child_num, num_children, wire_num, num_wires, offset);
+	                    dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) next loop ...\n", child_num, num_children, wire_num, num_wires, offset);
                         double max_depth = offset / tan(angle) * -1.0;
                         double step_down = m_depth_op_params.m_step_down;
                         if (m_depth_op_params.m_step_down > (-1.0 * max_depth))
@@ -1014,31 +1022,31 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
                         {
                             step_down = m_depth_op_params.m_step_down;
                         }
-	                    printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) max_depth: %g, step_down: %g ...\n"), child_num, num_children, wire_num, num_wires, offset, max_depth, step_down);
+	                    dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) max_depth: %g, step_down: %g ...\n", child_num, num_children, wire_num, num_wires, offset, max_depth, step_down);
 
                         for (double depth = m_depth_op_params.m_start_depth - step_down; ((step_down > tolerance) && (depth >= max_depth)); /* increment within loop */ )
                         {
-	                        printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) next loop ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                        dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) next loop ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 							if (std::find(depths.begin(), depths.end(), depth) == depths.end()) depths.push_back( depth );
 
 							// Machine here with the chamfering bit.
 							try {
-	                            printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) offset_wire(...)  ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                            dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) offset_wire(...)  ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 								BRepOffsetAPI_MakeOffset offset_wire(TopoDS::Wire(wire));
-	                            printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) offset_wire.Perform(...)  ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                            dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) offset_wire.Perform(...)  ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 								offset_wire.Perform(offset * -1.0);
 
 								if (offset_wire.IsDone())
 								{
-	                                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) TopoDS::Wire(...) ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) TopoDS::Wire(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									TopoDS_Wire toolpath = TopoDS::Wire(offset_wire.Shape());
 									gp_Trsf translation;
 									translation.SetTranslation( gp_Vec( gp_Pnt(0,0,0), gp_Pnt( 0,0,depth)));
-	                                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) translate(...) ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) translate(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									BRepBuilderAPI_Transform translate(translation);
-	                                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) translate.Perform(...) ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) translate.Perform(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									translate.Perform(toolpath, false);
-	                                printf(DBG_NOTE("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) TopoDS::Wire(...) ...\n"), child_num, num_children, wire_num, num_wires, offset, depth);
+	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) TopoDS::Wire(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									toolpath = TopoDS::Wire(translate.Shape());
 
                                     Path path;
@@ -1096,16 +1104,16 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 					(void) error;	// Avoid the compiler warning.
 					Handle_Standard_Failure e = Standard_Failure::Caught();
 			} // End catch
-	        printf(DBG_NOTE("(child_num %d/%d) ... done converting to list of wires.\n"), child_num, num_children);
+	        dprintf("(child_num %d/%d) ... done converting to list of wires.\n", child_num, num_children);
 		} // End if - then
 		else
 		{
-	        printf(DBG_NOTE("(child_num %d/%d) ... could not convert sketch %d to list of wires.\n"), child_num, num_children, object->m_id);
+	        dprintf("(child_num %d/%d) ... could not convert sketch %d to list of wires.\n", child_num, num_children, object->m_id);
 			printf("Could not convert sketch id%d to wire\n", object->m_id );
 		}
-	    printf(DBG_NOTE("(child_num %d/%d) ... done considering child.\n"), child_num, num_children);
+	    dprintf("(child_num %d/%d) ... done considering child.\n", child_num, num_children);
 	} // End for
-	printf(DBG_NOTE("... done iterating through %d children.\n"), num_children);
+	dprintf("... done iterating through %d children.\n", num_children);
 
 	return(valleys);
 
@@ -1116,7 +1124,7 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 
 Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachineState  )
 {
-	printf(DBG_NOTE("entered ...\n"));
+	dprintf("entered ...\n");
 	Python python;
 
 	python << _T("comment(") << PythonString(_("Form valley walls")) << _T(")\n");
@@ -1188,7 +1196,7 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
         python << FormCorners( *itValley, pMachineState );
 	} // End for
 
-	printf(DBG_NOTE("... Done.\n"));
+	dprintf("... Done.\n");
 	return(python);
 
 } // End FormValleyWalls() method
@@ -1198,7 +1206,7 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
 
 Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMachineState  )
 {
-	printf(DBG_NOTE("entered ...\n"));
+	dprintf("entered ...\n");
 	Python python;
 
 	python << _T("comment(") << PythonString(_("Form valley pockets")) << _T(")\n");
@@ -1209,11 +1217,11 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
 	int num_valleys = valleys.size();
 	int valley_num = 0;
 	CNCPoint last_position(0,0,0);
-	printf(DBG_NOTE("iterating through %d valleys to generate pockets ...\n"), num_valleys);
+	dprintf("iterating through %d valleys to generate pockets ...\n", num_valleys);
 	for (Valleys_t::iterator itValley = valleys.begin(); itValley != valleys.end(); itValley++)
 	{
 		valley_num++;
-	  printf(DBG_NOTE("(valley_num %d/%d) considering valley ...\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) considering valley ...\n", valley_num, num_valleys);
 		// Find the largest offset and the largest depth values.
 	    double min_depth = 0.0;
 	    double max_offset = 0.0;
@@ -1223,14 +1231,14 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
 			if (itPath->Depth() < min_depth) min_depth = itPath->Depth();
 		} // End for
 
-	  printf(DBG_NOTE("(valley_num %d/%d) min_depth: %g ...\n"), valley_num, num_valleys, min_depth);
-	  printf(DBG_NOTE("(valley_num %d/%d) max_offset: %g ...\n"), valley_num, num_valleys, max_offset);
+	  dprintf("(valley_num %d/%d) min_depth: %g ...\n", valley_num, num_valleys, min_depth);
+	  dprintf("(valley_num %d/%d) max_offset: %g ...\n", valley_num, num_valleys, max_offset);
 
         Path path;
         path.Offset(max_offset);
         path.Depth(min_depth);
 
-	      printf(DBG_NOTE("(valley_num %d/%d) (min_depth %g) (max_offset %g) finding path ...\n"), valley_num, num_valleys, min_depth, max_offset);
+	      dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) finding path ...\n", valley_num, num_valleys, min_depth, max_offset);
         Valley_t::iterator itPath = std::find(itValley->begin(),  itValley->end(), path);
         if (itPath != itValley->end())
         {
@@ -1238,11 +1246,11 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
             // and using the Clearance Tool.  Without this, the chamfering bit would need
             // to machine out the centre of the valley as well as the walls.
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (min_depth %g) (max_offset %g) converting path to wire ...\n"), valley_num, num_valleys, min_depth, max_offset);
+	          dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) converting path to wire ...\n", valley_num, num_valleys, min_depth, max_offset);
             // Rotate this wire to align with the fixture.
             TopoDS_Wire wire(itPath->Wire());
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (min_depth %g) (max_offset %g) aligning ...\n"), valley_num, num_valleys, min_depth, max_offset);
+	          dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) aligning ...\n", valley_num, num_valleys, min_depth, max_offset);
             // Rotate this wire to align with the fixture.
             BRepBuilderAPI_Transform transform1(pMachineState->Fixture().GetMatrix(CFixture::YZ));
             transform1.Perform(wire, false);
@@ -1256,7 +1264,7 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
             transform3.Perform(wire, false);
             wire = TopoDS::Wire(transform3.Shape());
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (min_depth %g) (max_offset %g) determining boundary sketch ...\n"), valley_num, num_valleys, min_depth, max_offset);
+	          dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) determining boundary sketch ...\n", valley_num, num_valleys, min_depth, max_offset);
             HeeksObj *pBoundary = heeksCAD->NewSketch();
             if (heeksCAD->ConvertWireToSketch(wire, pBoundary, heeksCAD->GetTolerance()))
             {
@@ -1277,7 +1285,7 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
                 TopoDS_Wire pocket_area;
                 // DeterminePocketArea(pBoundary, pMachineState, &pocket_area);
 
-	              printf(DBG_NOTE("(valley_num %d/%d) (min_depth %g) (max_offset %g) generating pocketing code ...\n"), valley_num, num_valleys, min_depth, max_offset);
+	              dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) generating pocketing code ...\n", valley_num, num_valleys, min_depth, max_offset);
                 CPocket *pPocket = new CPocket( objects, m_params.m_clearance_tool );
                 pPocket->m_depth_op_params = m_depth_op_params;
                 pPocket->m_depth_op_params.m_final_depth = itPath->Depth();
@@ -1289,10 +1297,10 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
                 pMachineState->Fixture(save_fixture);
             } // End if - then
         } // End if - then
-	  printf(DBG_NOTE("(valley_num %d/%d) done considering this valley.\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) done considering this valley.\n", valley_num, num_valleys);
 	} // End for
 
-	printf(DBG_NOTE("... Done.\n"));
+	dprintf("... Done.\n");
 	return(python);
 
 } // End FormValleyPockets() method
@@ -1300,7 +1308,7 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
 
 Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pMachineState, const bool only_above_mountains  )
 {
-	printf(DBG_NOTE("entered ...\n"));
+	dprintf("entered ...\n");
 	Python python;
 
 	if (only_above_mountains)
@@ -1345,7 +1353,7 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
 			} // End if - then
 		} // End for
 	} // End for
-	printf(DBG_NOTE("max valley depth: %g ...\n"), max_valley_depth);
+	dprintf("max valley depth: %g ...\n", max_valley_depth);
 
 	double max_mountain_height = max_valley_depth * -1.0;
 
@@ -1360,23 +1368,23 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
 	CNCPoint last_position(0,0,0);
 	num_valleys = valleys.size();
 	valley_num = 0;
-	printf(DBG_NOTE("iterating through %d valleys ...\n"), num_valleys);
+	dprintf("iterating through %d valleys ...\n", num_valleys);
 	for (Valleys_t::iterator itValley = valleys.begin(); itValley != valleys.end(); itValley++)
 	{
     valley_num++;
-	  printf(DBG_NOTE("(valley_num %d/%d) considering valley ...\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) considering valley ...\n", valley_num, num_valleys);
 		// For this valley, see if it's shorter than the tallest valley.  If it is, we need to pocket
 		// out the material directly above the valley (down to this valley's peak).  This clears the way
 		// to start forming this valley's walls.
 
 		std::list<double> depths;
     int num_paths = itValley->size();
-	  printf(DBG_NOTE("(valley_num %d/%d) iterating through %d paths to identify highest and lowest points ...\n"), valley_num, num_valleys, num_paths);
+	  dprintf("(valley_num %d/%d) iterating through %d paths to identify highest and lowest points ...\n", valley_num, num_valleys, num_paths);
 		for (Valley_t::iterator itPath = itValley->begin(); itPath != itValley->end(); itPath++)
 		{
 			depths.push_back(itPath->Depth());
 		} // End for
-	  printf(DBG_NOTE("(valley_num %d/%d) done iterating through paths ...\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) done iterating through paths ...\n", valley_num, num_valleys);
 
 		depths.sort();
 
@@ -1385,8 +1393,8 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
 		depths.reverse();
 		double base_height = *(depths.begin()) * -1.0;
 
-	  printf(DBG_NOTE("(valley_num %d/%d) mountain height: %g ...\n"), valley_num, num_valleys, mountain_height);
-	  printf(DBG_NOTE("(valley_num %d/%d) base height: %g ...\n"), valley_num, num_valleys, base_height);
+	  dprintf("(valley_num %d/%d) mountain height: %g ...\n", valley_num, num_valleys, mountain_height);
+	  dprintf("(valley_num %d/%d) base height: %g ...\n", valley_num, num_valleys, base_height);
 		// We need to generate a pocket operation based on this tool_path_wire
 		// and using the Clearance Tool.  Without this, the chamfering bit would need
 		// to machine out the centre of the valley as well as the walls.
@@ -1401,18 +1409,18 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
             // It's the male half we're generating.  Rotate the wire around one
             // of the two axes so that we end up machining the reverse of the
             // female half.
-	          printf(DBG_NOTE("(valley_num %d/%d) (base height %g) converting path to wire ...\n"), valley_num, num_valleys, base_height);
+	          dprintf("(valley_num %d/%d) (base height %g) converting path to wire ...\n", valley_num, num_valleys, base_height);
             gp_Trsf rotation;
             TopoDS_Wire tool_path_wire(itPath->Wire());
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (base height %g) rotating ...\n"), valley_num, num_valleys, base_height);
+	          dprintf("(valley_num %d/%d) (base height %g) rotating ...\n", valley_num, num_valleys, base_height);
             rotation.SetRotation( mirror_axis, PI );
             BRepBuilderAPI_Transform rotate(rotation);
             rotate.Perform(tool_path_wire, false);
             tool_path_wire = TopoDS::Wire(rotate.Shape());
 
             // Rotate this wire to align with the fixture.
-	          printf(DBG_NOTE("(valley_num %d/%d) (base height %g) aligning ...\n"), valley_num, num_valleys, base_height);
+	          dprintf("(valley_num %d/%d) (base height %g) aligning ...\n", valley_num, num_valleys, base_height);
             BRepBuilderAPI_Transform transform1(pMachineState->Fixture().GetMatrix(CFixture::YZ));
             transform1.Perform(tool_path_wire, false);
             tool_path_wire = TopoDS::Wire(transform1.Shape());
@@ -1425,14 +1433,14 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
             transform3.Perform(tool_path_wire, false);
             tool_path_wire = TopoDS::Wire(transform3.Shape());
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (base height %g) determining boundary sketch ...\n"), valley_num, num_valleys, base_height);
+	          dprintf("(valley_num %d/%d) (base height %g) determining boundary sketch ...\n", valley_num, num_valleys, base_height);
             HeeksObj *pBoundary = heeksCAD->NewSketch();
             if (heeksCAD->ConvertWireToSketch(tool_path_wire, pBoundary, heeksCAD->GetTolerance()))
             {
                 // Make sure this sketch is oriented counter-clockwise.  We will ensure the
                 // bounding sketch is oriented clockwise so that the pocket operation
                 // removes the intervening material.
-	              printf(DBG_NOTE("(valley_num %d/%d) (base height %g) reordering boundary sketch to ccw ...\n"), valley_num, num_valleys, base_height);
+	              dprintf("(valley_num %d/%d) (base height %g) reordering boundary sketch to ccw ...\n", valley_num, num_valleys, base_height);
                 for (int i=0; (heeksCAD->GetSketchOrder(pBoundary) != SketchOrderTypeCloseCCW) && (i<4); i++)
                 {
                     // At least try to make them all consistently oriented.
@@ -1444,7 +1452,7 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
 
                 if ((max_mountain_height - mountain_height) > tolerance)
                 {
-	                  printf(DBG_NOTE("(valley_num %d/%d) (base height %g) creating pocketing object ...\n"), valley_num, num_valleys, base_height);
+	                  dprintf("(valley_num %d/%d) (base height %g) creating pocketing object ...\n", valley_num, num_valleys, base_height);
                     CPocket *pPocket = new CPocket( objects, m_params.m_clearance_tool );
                     pPocket->m_depth_op_params = m_depth_op_params;
                     pPocket->m_speed_op_params = m_speed_op_params;
@@ -1466,14 +1474,14 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
                         straight.m_params.m_pivot_point = gp_Pnt(0.0, 0.0, 0.0);
                         pMachineState->Fixture(straight);    // Replace with a straight fixture.
 
-	                      printf(DBG_NOTE("(valley_num %d/%d) (base height %g) generating pocketing code ...\n"), valley_num, num_valleys, base_height);
+	                      dprintf("(valley_num %d/%d) (base height %g) generating pocketing code ...\n", valley_num, num_valleys, base_height);
                         python << pPocket->AppendTextToProgram(pMachineState);
 
                         pMachineState->Fixture(save_fixture);
                     }
                 } // End if - then
 
-	              printf(DBG_NOTE("(valley_num %d/%d) (base height %g) saving boundary box ...\n"), valley_num, num_valleys, base_height);
+	              dprintf("(valley_num %d/%d) (base height %g) saving boundary box ...\n", valley_num, num_valleys, base_height);
                 CBox box;
                 pBoundary->GetBox(box);
                 bounding_box.Insert(box);
@@ -1481,7 +1489,7 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
                 mirrored_sketches.push_back(pBoundary);
             }
         } // End if - then
-	      printf(DBG_NOTE("(valley_num %d/%d) (base height %g) done considering this valley.\n"), valley_num, num_valleys, base_height);
+	      dprintf("(valley_num %d/%d) (base height %g) done considering this valley.\n", valley_num, num_valleys, base_height);
 	} // End for
 
 
@@ -1608,7 +1616,7 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
 		delete *itPocket;		// We don't need it any more.
 	} // End for
 
-	printf(DBG_NOTE("... Done.\n"));
+	dprintf("... Done.\n");
 	return(python);
 
 } // End FormMountainPockets() method
@@ -1617,7 +1625,7 @@ Python CInlay::FormMountainPockets( CInlay::Valleys_t valleys, CMachineState *pM
 
 Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMachineState  )
 {
-	printf(DBG_NOTE("entered ...\n"));
+	dprintf("entered ...\n");
 	Python python;
 
 	python << _T("comment(") << PythonString(_("Form mountain walls")) << _T(")\n");
@@ -1639,7 +1647,7 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
 	    mirror_axis = gp_Ax1(gp_Pnt(0,0,0), gp_Dir(0,1,0));
 	}
 
-	printf(DBG_NOTE("finding max valley depth ...\n"));
+	dprintf("finding max valley depth ...\n");
 	// Find the maximum valley depth for all valleys.  Once the valleys are rotated (upside-down), this
 	// will become the maximum mountain height.  This, in turn, will be used as the top-most surface
 	// of the male half.  i.e. the '0' height when machining the male half.
@@ -1654,26 +1662,26 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
 			} // End if - then
 		} // End for
 	} // End for
-	printf(DBG_NOTE("max valley depth: %g ...\n"), max_valley_depth);
+	dprintf("max valley depth: %g ...\n", max_valley_depth);
 
   int num_valleys = valleys.size();
   int valley_num = 0;
 	CNCPoint last_position(0,0,0);
-	printf(DBG_NOTE("iterating through %d valleys ...\n"), num_valleys);
+	dprintf("iterating through %d valleys ...\n", num_valleys);
 	for (Valleys_t::iterator itValley = valleys.begin(); itValley != valleys.end(); itValley++)
 	{
     valley_num++;
-	  printf(DBG_NOTE("(valley_num %d/%d) considering valley ...\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) considering valley ...\n", valley_num, num_valleys);
 		std::list<double> depths;
 		std::list<double> offsets;
     int num_paths = itValley->size();
-	  printf(DBG_NOTE("(valley_num %d/%d) iterating through %d paths to identify depths and offsets ...\n"), valley_num, num_valleys, num_paths);
+	  dprintf("(valley_num %d/%d) iterating through %d paths to identify depths and offsets ...\n", valley_num, num_valleys, num_paths);
 		for (Valley_t::iterator itPath = itValley->begin(); itPath != itValley->end(); itPath++)
 		{
 			depths.push_back(itPath->Depth());
 			offsets.push_back(itPath->Offset());
 		} // End for
-	  printf(DBG_NOTE("(valley_num %d/%d) done iterating through paths ...\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) done iterating through paths ...\n", valley_num, num_valleys);
 
 		depths.sort();
 		depths.unique();
@@ -1683,16 +1691,16 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
 		offsets.unique();
 		offsets.reverse();  // Go from the largest offset (inside) to the smallest offset (outside)
 
-	  printf(DBG_NOTE("(valley_num %d/%d) generating walls ...\n"), valley_num, num_valleys);
+	  dprintf("(valley_num %d/%d) generating walls ...\n", valley_num, num_valleys);
 		for (std::list<double>::iterator itOffset = offsets.begin(); itOffset != offsets.end(); itOffset++)
 		{
             // Find the highest wire for this offset in the valley.  When it's mirrored, this will become
             // the lowest wire for the mountain.  We will then step down to it from the top level.
-	          printf(DBG_NOTE("(valley_num %d/%d) (offset %g) finding highest wire at this offset ...\n"), valley_num, num_valleys, *itOffset);
+	          dprintf("(valley_num %d/%d) (offset %g) finding highest wire at this offset ...\n", valley_num, num_valleys, *itOffset);
             Valley_t::iterator itPath = itValley->end();
             for (std::list<double>::iterator itDepth = depths.begin(); itDepth != depths.end(); itDepth++)
             {
-	              printf(DBG_NOTE("(valley_num %d/%d) (offset %g) (depth %g) consider wire at this offset and depth ...\n"), valley_num, num_valleys, *itOffset, *itDepth);
+	              dprintf("(valley_num %d/%d) (offset %g) (depth %g) consider wire at this offset and depth ...\n", valley_num, num_valleys, *itOffset, *itDepth);
                 Path path;
                 path.Offset(*itOffset);
                 path.Depth(*itDepth);
@@ -1714,7 +1722,7 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
                 }
             } // End for
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (offset %g) rotating wire to work on female half ...\n"), valley_num, num_valleys, *itOffset);
+	          dprintf("(valley_num %d/%d) (offset %g) rotating wire to work on female half ...\n", valley_num, num_valleys, *itOffset);
             // It's the male half we're generating.  Rotate the wire around one
             // of the two axes so that we end up machining the reverse of the
             // female half.
@@ -1728,7 +1736,7 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
 
             if (fabs(max_valley_depth) > tolerance)
             {
-	              printf(DBG_NOTE("(valley_num %d/%d) (offset %g) offsetting wire downward ...\n"), valley_num, num_valleys, *itOffset);
+	              dprintf("(valley_num %d/%d) (offset %g) offsetting wire downward ...\n", valley_num, num_valleys, *itOffset);
                 // And offset the wire 'down' so that the maximum depth reached during the
                 // female half's processing ends up being at the 'top-most' surface of the
                 // male half we're producing.
@@ -1739,18 +1747,18 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
                 top_level_wire = TopoDS::Wire(translate.Shape());
             }
 
-	          printf(DBG_NOTE("(valley_num %d/%d) (offset %g) generating new wires ...\n"), valley_num, num_valleys, *itOffset);
+	          dprintf("(valley_num %d/%d) (offset %g) generating new wires ...\n", valley_num, num_valleys, *itOffset);
             double final_depth = max_valley_depth - itPath->Depth();
             for (double depth = m_depth_op_params.m_start_depth - m_depth_op_params.m_step_down;
             // for (double depth = m_depth_op_params.m_start_depth;
                     depth >= final_depth; /* decrement within loop */ )
             {
-	              printf(DBG_NOTE("(valley_num %d/%d) (offset %g) (depth %g) generating new wire ...\n"), valley_num, num_valleys, *itOffset, depth);
+	              dprintf("(valley_num %d/%d) (offset %g) (depth %g) generating new wire ...\n", valley_num, num_valleys, *itOffset, depth);
                 TopoDS_Wire tool_path_wire(top_level_wire);
 
                 if (fabs(depth) > tolerance)
                 {
-	                  printf(DBG_NOTE("(valley_num %d/%d) (offset %g) (depth %g) offsetting new wire downward ...\n"), valley_num, num_valleys, *itOffset, depth);
+	                  dprintf("(valley_num %d/%d) (offset %g) (depth %g) offsetting new wire downward ...\n", valley_num, num_valleys, *itOffset, depth);
                     // And offset the wire 'down' so that the maximum depth reached during the
                     // female half's processing ends up being at the 'top-most' surface of the
                     // male half we're producing.
@@ -1774,10 +1782,10 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
                 transform3.Perform(tool_path_wire, false);
                 tool_path_wire = TopoDS::Wire(transform3.Shape());
 
-	              printf(DBG_NOTE("(valley_num %d/%d) (offset %g) (depth %g) generating Python code for new wire ...\n"), valley_num, num_valleys, *itOffset, depth);
+	              dprintf("(valley_num %d/%d) (offset %g) (depth %g) generating Python code for new wire ...\n", valley_num, num_valleys, *itOffset, depth);
                 python << pMachineState->Tool(m_tool_number);  // Select the chamfering bit.
 
-	              printf(DBG_NOTE("(valley_num %d/%d) (offset %g) (depth %g) CContour::GeneratePathFromWire(...) ...\n"), valley_num, num_valleys, *itOffset, depth);
+	              dprintf("(valley_num %d/%d) (offset %g) (depth %g) CContour::GeneratePathFromWire(...) ...\n", valley_num, num_valleys, *itOffset, depth);
                 python << CContour::GeneratePathFromWire(tool_path_wire,
                                                         pMachineState,
 														m_depth_op_params.ClearanceHeight(),
@@ -1785,7 +1793,7 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
                                                         m_depth_op_params.m_start_depth,
                                                         CContourParams::ePlunge );
 
-	              printf(DBG_NOTE("(valley_num %d/%d) (offset %g) (depth %g) ... CContour::GeneratePathFromWire(...) done.\n"), valley_num, num_valleys, *itOffset, depth);
+	              dprintf("(valley_num %d/%d) (offset %g) (depth %g) ... CContour::GeneratePathFromWire(...) done.\n", valley_num, num_valleys, *itOffset, depth);
                 if (depth == final_depth)
                 {
                     depth -= m_depth_op_params.m_step_down; // break out
@@ -1806,7 +1814,7 @@ Python CInlay::FormMountainWalls( CInlay::Valleys_t valleys, CMachineState *pMac
 		} // End for
 	} // End for
 
-	printf(DBG_NOTE("... Done.\n"));
+	dprintf("... Done.\n");
 	return(python);
 
 } // End FormMountainWalls() method
