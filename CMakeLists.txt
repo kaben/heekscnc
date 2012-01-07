@@ -31,6 +31,11 @@ else() #look for OpenCASCADE
   find_package ( OpenCASCADE REQUIRED COMPONENTS ${CASCADE_LIBS} )
 endif()
 
+#find libarea
+#SET(AREA_ROOT ./libarea/build)
+#FIND_PACKAGE(AREA)
+add_subdirectory(libarea)
+
 include(${wxWidgets_USE_FILE})
 include_directories (
 	${CMAKE_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
