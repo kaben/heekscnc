@@ -308,10 +308,6 @@ const wxBitmap &CInlay::GetIcon()
 Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 {
 	dprintf("Hi!\n");
-	dprintf("instantiating CArea ...\n");
-    {
-        CArea a;
-    }
 	dprintf("... done instantiating CArea.\n");
 
     Python python;
