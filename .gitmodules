@@ -6,4 +6,4 @@
 	url = git://github.com/aewallin/opencamlib.git
 [submodule "oce"]
 	path = oce
-	url = git://github.com/tpaviot/oce.git
+	url = git://github.com/kaben/oce.git
