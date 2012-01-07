@@ -31,6 +31,9 @@
 #ifndef CNCPoint_h
 #include "CNCPoint.h"
 #endif
+#ifndef _gp_Pnt_HeaderFile
+#include <gp_Pnt.hxx>
+#endif
 #ifndef _TopoDS_Wire_HeaderFile
 #include <TopoDS_Wire.hxx>
 #endif
@@ -213,6 +216,7 @@ public:
 	static void GetOptions(std::list<Property *> *list);
 
 	static std::vector<TopoDS_Edge> SortEdges( const TopoDS_Wire & wire );
+  static std::vector<TopoDS_Edge> SortEdges2( const TopoDS_Wire & wire );
 	static bool DirectionTowarardsNextEdge( const TopoDS_Edge &from, const TopoDS_Edge &to );
 
 	static std::vector<TopoDS_Edge>::size_type NextOffset(	const std::vector<TopoDS_Edge> &edges,
@@ -258,6 +262,23 @@ struct EdgeComparison : public std::binary_function<const TopoDS_Edge &, const T
     }
 
     TopoDS_Edge m_reference_edge;
+};
+
+struct EdgeComparisonRefPt : public std::binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >
+{
+    gp_Pnt m_reference_point;
+    EdgeComparisonRefPt(const gp_Pnt & point): m_reference_point(point) {}
+
+    bool operator()( const TopoDS_Edge & lhs, const TopoDS_Edge & rhs ) const
+    {
+        double lhs_distance = CContour::_GetStart(lhs).Distance(m_reference_point);
+        double rhs_distance = CContour::_GetStart(rhs).Distance(m_reference_point);
+        double tmp_distance = CContour::_GetEnd(lhs).Distance(m_reference_point);
+        if (tmp_distance < lhs_distance) lhs_distance = tmp_distance;
+        tmp_distance = CContour::_GetEnd(rhs).Distance(m_reference_point);
+        if (tmp_distance < rhs_distance) rhs_distance = tmp_distance;
+        return(lhs_distance < rhs_distance);
+    }
 };
 
 

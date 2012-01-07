@@ -87,3 +87,51 @@
 } // End SortEdges() method
 
 
+/**
+	Find the edge whose endpoint is closest to gp_Pnt(0,0,0), and then traverse
+	the rest of the wire loop starting at this edge, building a new edge list
+	as we go. We do this so that the results of this sorting are consistent
+	from one SortEdges2() call to the next. We want consistency so
+	that, if we use this Contour operation as a location for drilling a relief
+	hole (one day), we want to be sure the machining will begin from a
+	consistently known location.
+
+  Note: this goal isn't actually met in either SortEdges() or SortEdges2(). See
+  unit tests for details and demonstration.
+*/
+/* static */ std::vector<TopoDS_Edge> CContour::SortEdges2( const TopoDS_Wire & wire )
+{
+    std::vector<TopoDS_Edge> edges;
+
+    for(BRepTools_WireExplorer expEdge(TopoDS::Wire(wire)); expEdge.More(); expEdge.Next())
+    {
+        edges.push_back( TopoDS_Edge(expEdge.Current()) );
+    } // End for
+
+    std::vector<TopoDS_Edge> final_edges;
+    EdgeComparisonRefPt compare_ref_origin(gp_Pnt(0,0,0));
+    std::vector<TopoDS_Edge>::iterator edge_closest_to_origin(
+      std::min_element(
+        edges.begin(), edges.end(), compare_ref_origin
+      )
+    );
+    std::vector<TopoDS_Edge>::iterator l_itEdge(edge_closest_to_origin);
+    while ( true )
+    {
+        final_edges.push_back( *l_itEdge );
+        l_itEdge++;
+        if ( l_itEdge == edges.end() )
+        {
+          l_itEdge = edges.begin();
+        }
+        if ( l_itEdge == edge_closest_to_origin )
+        {
+          break;
+        }
+    } // End while
+
+    return(final_edges);
+
+} // End SortEdges2() method
+
+
