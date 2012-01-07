@@ -86,7 +86,7 @@ CHeeksCNCApp::CHeeksCNCApp(){
 	m_machiningBar = NULL;
 	m_icon_texture_number = 0;
 	m_machining_hidden = false;
-	dprintf("HeeksCNC compiled " __TIME__ ", "__DATE__".\n");
+	dprintf("this copy of HeeksCNC was compiled " __TIME__ ", "__DATE__".\n");
 }
 
 CHeeksCNCApp::~CHeeksCNCApp(){
