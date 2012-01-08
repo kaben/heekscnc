@@ -1,9 +1,9 @@
 [submodule "libarea"]
 	path = libarea
-	url = git://github.com/kaben/libarea.git
+	url = git@github.com:kaben/libarea.git
 [submodule "opencamlib"]
 	path = opencamlib
-	url = git://github.com/aewallin/opencamlib.git
+	url = git@github.com:kaben/opencamlib.git
 [submodule "oce"]
 	path = oce
-	url = git://github.com/kaben/oce.git
+	url = git@github.com:kaben/oce.git
