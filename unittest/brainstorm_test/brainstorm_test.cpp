@@ -7,7 +7,9 @@
 #include "src/Contour.h"
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeWire.hxx>
+#include <algorithm>
 #include <iostream>
+#include <vector>
 
 using namespace std;
 
@@ -51,6 +53,104 @@ TEST(TestSuite, testIntegerLighter)
     EXPECT_LT(a,b);
 }
 
+template<typename _RandomAccessIterator, typename _Compare>
+  inline void
+  partial_sort(_RandomAccessIterator __first,
+	 _RandomAccessIterator __middle,
+	 _RandomAccessIterator __last,
+	 _Compare __comp)
+  {
+  }
+TEST(MyAdaptivePartialSortTestSuite, brainstorm)
+{
+  vector<int> myints;
+  myints.push_back(3);
+  myints.push_back(7);
+  myints.push_back(2);
+  myints.push_back(5);
+  myints.push_back(6);
+  myints.push_back(4);
+  myints.push_back(9);
+}
+
+TEST(StdMinElementTestSuite, testIteration)
+{
+  vector<int> myints;
+  myints.push_back(3);
+  myints.push_back(7);
+  myints.push_back(2);
+  myints.push_back(5);
+  myints.push_back(6);
+  myints.push_back(4);
+  myints.push_back(9);
+
+  vector<int>::iterator min_it(min_element(myints.begin(), myints.end()));
+  vector<int>::iterator it(min_it);
+
+  cout << "found " << myints.size() << " ints." << endl << endl;
+  int i = 0;
+  while (true) {
+    i++;
+    cout << "bogus iteration: " << i << endl;
+    cout << "element: " << *it << endl;
+    it++;
+    cout << "myints.begin(): " << *(myints.begin()) << endl;
+    cout << "myints.end(): " << *(myints.end()) << endl;
+    cout << "min_it): " << *min_it << endl;
+    if (it == myints.end()) {
+      cout << "wraparound!" << endl;
+      it = myints.begin();
+    }
+    if (it == min_it) {
+      cout << "breaking!" << endl;
+      break;
+    }
+    cout << endl;
+  }
+  cout << "done." << endl;
+
+  cout << "first true iteration." << endl;
+  i = 0;
+  it = myints.begin();
+  for (; it != myints.end(); it++) {
+    cout << "i: " << ++i << endl;
+    cout << "it: " << *it << endl;
+  }
+  cout << "first true iteration done." << endl;
+
+  cout << "second true iteration." << endl;
+  i = 0;
+  it = myints.begin();
+  for (vector<int>::iterator it2 = myints.begin(); it != myints.end(); it++, it2++) {
+    cout << "i: " << ++i << endl;
+    //if (it2 == myints.begin()) {
+    //  cout << "at begin..." << endl;
+    //  partial_sort(myints.begin(), myints.begin()+1, myints.end());
+    //} else {
+    //  cout << "in middle..." << endl;
+    //  //vector<int>::iterator it3(it2);
+    //  //it3++;
+    //  //if (it3 != myints.end()) {
+    //  //  cout << "not at end. partial-sorting..." << endl;
+    //  //  partial_sort(it3, it3+1, myints.end());
+    //  //}
+    //  partial_sort(it2, it2+1, myints.end());
+    //}
+    partial_sort(it2, it2+1, myints.end());
+    cout << "it: " << *it << endl;
+    cout << "it2: " << *it2 << endl;
+  }
+  cout << "second true iteration done." << endl;
+
+  cout << "third true iteration." << endl;
+  i = 0;
+  it = myints.begin();
+  for (; it != myints.end(); it++) {
+    cout << "i: " << ++i << endl;
+    cout << "it: " << *it << endl;
+  }
+  cout << "third true iteration done." << endl;
+}
 
 // Run all the tests that were declared with TEST()
 int main(int argc, char **argv){

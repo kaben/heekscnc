@@ -24,6 +24,8 @@
 #include "MachineState.h"
 #include "PocketDlg.h"
 
+#include "interface/TestMacros.h"
+
 #include <sstream>
 
 // static
@@ -363,6 +365,7 @@ const wxBitmap &CPocket::GetIcon()
 
 Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 {
+  printf("entered ...\n");
 	Python python;
   int num_curves = 0;
 
@@ -384,6 +387,9 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 	python << _T("entry_moves = []\n");
 
 #ifdef OP_SKETCHES_AS_CHILDREN
+	int num_children = GetNumChildren();
+	int child_num = 0;
+	dprintf("iterating through %d children to generate pockets ...\n", num_children);
     for (HeeksObj *object = GetFirstChild(); object != NULL; object = GetNextChild())
     {
 #else
@@ -391,8 +397,11 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
     {
 		HeeksObj* object = heeksCAD->GetIDObject(SketchType, *It);
 #endif
+        child_num++;
+	    dprintf("(child_num %d/%d) considering child ...\n", child_num, num_children);
 		if (object->GetType() != SketchType)
 		{
+	        dprintf("(child_num %d/%d) skipping non-sketch child ...\n", child_num, num_children);
 			continue;	// Skip private fixture objects.
 		}
 
@@ -407,6 +416,7 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 		switch (type) {
 
 		case CircleType:
+	        dprintf("(child_num %d/%d) circle! ...\n", child_num, num_children);
 			if (m_pocket_params.m_entry_move == CPocketParams::eHelical) {
 				GetCentrePoint(c);
 				radius = heeksCAD->CircleGetRadius(object);
@@ -418,6 +428,7 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 			continue;
 
 		case PointType:
+	        dprintf("(child_num %d/%d) point! ...\n", child_num, num_children);
 			if (m_pocket_params.m_entry_move == CPocketParams::eHelical) {
 				memset( c, 0, sizeof(c) );
 				heeksCAD->VertexGetPoint( object, c);
@@ -436,16 +447,21 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 			continue;
 		}
 
+	    dprintf("(child_num %d/%d) GetSketchOrder(...) ...\n", child_num, num_children);
 		HeeksObj* re_ordered_sketch = NULL;
 		SketchOrderType order = heeksCAD->GetSketchOrder(object);
+	    dprintf("(child_num %d/%d) considering whether to reorder ...\n", child_num, num_children);
 		if( 	(order != SketchOrderTypeCloseCW) &&
 			(order != SketchOrderTypeCloseCCW) &&
 			(order != SketchOrderTypeMultipleCurves) &&
 			(order != SketchOrderHasCircles))
 		{
+	        dprintf("(child_num %d/%d) reordering ...\n", child_num, num_children);
 			re_ordered_sketch = object->MakeACopy();
+	        dprintf("(child_num %d/%d) ReOrderSketch(...) ...\n", child_num, num_children);
 			heeksCAD->ReOrderSketch(re_ordered_sketch, SketchOrderTypeReOrder);
 			object = re_ordered_sketch;
+	        dprintf("(child_num %d/%d) GetSketchOrder(...) (again) ...\n", child_num, num_children);
 			order = heeksCAD->GetSketchOrder(object);
 			if(	(order != SketchOrderTypeCloseCW) &&
 				(order != SketchOrderTypeCloseCCW) &&
@@ -475,13 +491,17 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 
 		if(object)
 		{
+	        dprintf("(child_num %d/%d) WriteSketchDefn(...) ...\n", child_num, num_children);
 			python << WriteSketchDefn(object, pMachineState, num_curves);
-		}
+		} else {
+	        dprintf("(child_num %d/%d) order is null , so not calling WriteSketchDefn(...) ...\n", child_num, num_children);
+        }
 
 		if(re_ordered_sketch)
 		{
 			delete re_ordered_sketch;
 		}
+	    dprintf("(child_num %d/%d) ... done considering this child.\n", child_num, num_children);
 	} // End for
 
 	// Pocket the area
@@ -522,6 +542,7 @@ Python CPocket::AppendTextToProgram(CMachineState *pMachineState)
 	// rapid back up to clearance plane
 	python << _T("rapid(z = clearance)\n");
 
+  printf("... done.\n");
 	return(python);
 
 } // End AppendTextToProgram() method

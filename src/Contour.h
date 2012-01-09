@@ -236,32 +236,41 @@ public:
 
 struct EdgeComparison : public std::binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >
 {
+
+    gp_Pnt m_reference_start;
+    gp_Pnt m_reference_end;
+
     EdgeComparison( const TopoDS_Edge & edge )
-    {
-        m_reference_edge = edge;
-    }
+	  : m_reference_start(CContour::_GetStart(edge))
+	  , m_reference_end(CContour::_GetEnd(edge))
+    { }
 
     bool operator()( const TopoDS_Edge & lhs, const TopoDS_Edge & rhs ) const
     {
 
-        std::vector<double> lhs_distances;
-        lhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetStart(lhs) ) );
-        lhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetEnd(lhs) ) );
-        lhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetStart(lhs) ) );
-        lhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetEnd(lhs) ) );
-        std::sort(lhs_distances.begin(), lhs_distances.end());
+        gp_Pnt lhs_start(CContour::_GetStart(lhs));
+        gp_Pnt lhs_end(CContour::_GetEnd(lhs));
+        gp_Pnt rhs_start(CContour::_GetStart(rhs));
+        gp_Pnt rhs_end(CContour::_GetEnd(rhs));
 
-        std::vector<double> rhs_distances;
-        rhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetStart(rhs) ) );
-        rhs_distances.push_back( CContour::_GetStart(m_reference_edge).Distance( CContour::_GetEnd(rhs) ) );
-        rhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetStart(rhs) ) );
-        rhs_distances.push_back( CContour::_GetEnd(m_reference_edge).Distance( CContour::_GetEnd(rhs) ) );
-        std::sort(rhs_distances.begin(), rhs_distances.end());
-
-        return(*(lhs_distances.begin()) < *(rhs_distances.begin()));
+        double lhs_distance = lhs_start.Distance(m_reference_start);
+        double tmp_distance = lhs_start.Distance(m_reference_end);
+        if (tmp_distance < lhs_distance) lhs_distance = tmp_distance;
+        tmp_distance = lhs_end.Distance(m_reference_start);
+        if (tmp_distance < lhs_distance) lhs_distance = tmp_distance;
+        tmp_distance = lhs_end.Distance(m_reference_end);
+        if (tmp_distance < lhs_distance) lhs_distance = tmp_distance;
+        
+        double rhs_distance = rhs_start.Distance(m_reference_start);
+        tmp_distance = rhs_start.Distance(m_reference_end);
+        if (tmp_distance < rhs_distance) rhs_distance = tmp_distance;
+        tmp_distance = rhs_end.Distance(m_reference_start);
+        if (tmp_distance < rhs_distance) rhs_distance = tmp_distance;
+        tmp_distance = rhs_end.Distance(m_reference_end);
+        if (tmp_distance < rhs_distance) rhs_distance = tmp_distance;
+        
+        return(lhs_distance < rhs_distance);
     }
-
-    TopoDS_Edge m_reference_edge;
 };
 
 struct EdgeComparisonRefPt : public std::binary_function<const TopoDS_Edge &, const TopoDS_Edge &, bool >

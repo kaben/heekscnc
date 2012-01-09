@@ -582,7 +582,7 @@ const wxBitmap &CContour::GetIcon()
 {
 	Python python;
 
-    std::vector<TopoDS_Edge> edges = SortEdges2(wire);
+    std::vector<TopoDS_Edge> edges = SortEdges(wire);
 
     for (std::vector<TopoDS_Edge>::size_type i=0; i<edges.size(); i++)
 	{

@@ -773,25 +773,35 @@ Python CInlay::FormCorners( Valley_t & paths, CMachineState *pMachineState ) con
 	// toolpaths.
     SortedCoordinates_t sorted_coordinates;
     std::copy( coordinates.begin(), coordinates.end(), std::inserter( sorted_coordinates, sorted_coordinates.begin() ));
+
+    sort_points_by_distance compare( pMachineState->Location() );
+    std::partial_sort(
+        sorted_coordinates.begin(),
+        sorted_coordinates.begin()+1,
+        sorted_coordinates.end(),
+        compare
+    );
     for (SortedCoordinates_t::iterator l_itPoint = sorted_coordinates.begin(); l_itPoint != sorted_coordinates.end(); l_itPoint++)
     {
-        if (l_itPoint == sorted_coordinates.begin())
-        {
-            sort_points_by_distance compare( pMachineState->Location() );
-            std::sort( sorted_coordinates.begin(), sorted_coordinates.end(), compare );
-        } // End if - then
-        else
-        {
-            // We've already begun.  Just sort based on the previous point's location.
-            SortedCoordinates_t::iterator l_itNextPoint = l_itPoint;
-            l_itNextPoint++;
+        //if (l_itPoint == sorted_coordinates.begin())
+        //{
+        //    sort_points_by_distance compare( pMachineState->Location() );
+        //    std::sort( sorted_coordinates.begin(), sorted_coordinates.end(), compare );
+        //} // End if - then
+        //else
+        //{
+        //    // We've already begun.  Just sort based on the previous point's location.
+        //    SortedCoordinates_t::iterator l_itNextPoint = l_itPoint;
+        //    l_itNextPoint++;
 
-            if (l_itNextPoint != sorted_coordinates.end())
-            {
-                sort_points_by_distance compare( *l_itPoint );
-                std::sort( l_itNextPoint, sorted_coordinates.end(), compare );
-            } // End if - then
-        } // End if - else
+        //    if (l_itNextPoint != sorted_coordinates.end())
+        //    {
+        //        sort_points_by_distance compare( *l_itPoint );
+        //        std::sort( l_itNextPoint, sorted_coordinates.end(), compare );
+        //    } // End if - then
+        //} // End if - else
+        sort_points_by_distance compare( *l_itPoint );
+        std::partial_sort( l_itPoint+1, l_itPoint+2, sorted_coordinates.end(), compare );
     } // End for
 
 	// We now have all the coordinates and vectors of all the edges in the wire.  Look at
@@ -1124,14 +1134,20 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
 	Python python;
 
 	python << _T("comment(") << PythonString(_("Form valley walls")) << _T(")\n");
+
 	python << pMachineState->Tool(m_tool_number);  // select the chamfering bit.
 	python << SelectFixture(pMachineState, true);	// Select female fixture (if appropriate)
 
     double tolerance = heeksCAD->GetTolerance();
 
+	int num_valleys = valleys.size();
+	int valley_num = 0;
 	CNCPoint last_position(0,0,0);
+	dprintf("iterating through %d valleys to generate contours ...\n", num_valleys);
 	for (Valleys_t::iterator itValley = valleys.begin(); itValley != valleys.end(); itValley++)
 	{
+		valley_num++;
+	    dprintf("(valley_num %d/%d) considering valley ...\n", valley_num, num_valleys);
 	    // Get a list of depths and offsets for this valley.
 	    std::list<double> depths;
 	    std::list<double> offsets;
@@ -1151,9 +1167,11 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
         {
             for (std::list<double>::iterator itDepth = depths.begin(); itDepth != depths.end(); itDepth++)
             {
+	            dprintf("(valley_num %d/%d) (offset %g) (depth %g) considering new path ...\n", valley_num, num_valleys, *itOffset, *itDepth);
                 // We don't want a toolpath at the top surface.
                 if (fabs(fabs(*itDepth) - fabs(m_depth_op_params.m_start_depth)) > (3.0 * tolerance))
                 {
+	                dprintf("(valley_num %d/%d) (offset %g) (depth %g) not at top surface, so we can create a contour here ...\n", valley_num, num_valleys, *itOffset, *itDepth);
                     Path path;
                     path.Offset(*itOffset);
                     path.Depth(*itDepth);
@@ -1161,8 +1179,10 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
                     Valley_t::iterator itPath = std::find(itValley->begin(),  itValley->end(), path);
                     if (itPath != itValley->end())
                     {
+	                    dprintf("(valley_num %d/%d) (offset %g) (depth %g) converting path to wire ...\n", valley_num, num_valleys, *itOffset, *itDepth);
                         TopoDS_Wire wire(itPath->Wire());
 
+	                    dprintf("(valley_num %d/%d) (offset %g) (depth %g) aligning ...\n", valley_num, num_valleys, *itOffset, *itDepth);
                         // Rotate this wire to align with the fixture.
                         BRepBuilderAPI_Transform transform1(pMachineState->Fixture().GetMatrix(CFixture::YZ));
                         transform1.Perform(wire, false);
@@ -1176,6 +1196,7 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
                         transform3.Perform(wire, false);
                         wire = TopoDS::Wire(transform3.Shape());
 
+	                    dprintf("(valley_num %d/%d) (offset %g) (depth %g) generating contouring code ...\n", valley_num, num_valleys, *itOffset, *itDepth);
                         python << CContour::GeneratePathFromWire(wire,
                                                                 pMachineState,
                                                                 m_depth_op_params.ClearanceHeight(),
@@ -1184,12 +1205,15 @@ Python CInlay::FormValleyWalls( CInlay::Valleys_t valleys, CMachineState *pMachi
                                                                 CContourParams::ePlunge );
                     } // End for
                 } // End if - then
+	            dprintf("(valley_num %d/%d) (offset %g) (depth %g) ... done considering this path.\n", valley_num, num_valleys, *itOffset, *itDepth);
             } // End for
         } // End for
 
+	    dprintf("(valley_num %d/%d) FormCorners(...) ...\n", valley_num, num_valleys);
         // Now run through the wires map and generate the toolpaths that will sharpen
         // the concave corners formed between adjacent edges.
         python << FormCorners( *itValley, pMachineState );
+	    dprintf("(valley_num %d/%d) ... done considering this valley.\n", valley_num, num_valleys);
 	} // End for
 
 	dprintf("... Done.\n");
@@ -1217,7 +1241,7 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
 	for (Valleys_t::iterator itValley = valleys.begin(); itValley != valleys.end(); itValley++)
 	{
 		valley_num++;
-	  dprintf("(valley_num %d/%d) considering valley ...\n", valley_num, num_valleys);
+	    dprintf("(valley_num %d/%d) considering valley ...\n", valley_num, num_valleys);
 		// Find the largest offset and the largest depth values.
 	    double min_depth = 0.0;
 	    double max_offset = 0.0;
@@ -1227,14 +1251,14 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
 			if (itPath->Depth() < min_depth) min_depth = itPath->Depth();
 		} // End for
 
-	  dprintf("(valley_num %d/%d) min_depth: %g ...\n", valley_num, num_valleys, min_depth);
-	  dprintf("(valley_num %d/%d) max_offset: %g ...\n", valley_num, num_valleys, max_offset);
+	    dprintf("(valley_num %d/%d) min_depth: %g ...\n", valley_num, num_valleys, min_depth);
+	    dprintf("(valley_num %d/%d) max_offset: %g ...\n", valley_num, num_valleys, max_offset);
 
         Path path;
         path.Offset(max_offset);
         path.Depth(min_depth);
 
-	      dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) finding path ...\n", valley_num, num_valleys, min_depth, max_offset);
+	    dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) finding path ...\n", valley_num, num_valleys, min_depth, max_offset);
         Valley_t::iterator itPath = std::find(itValley->begin(),  itValley->end(), path);
         if (itPath != itValley->end())
         {
@@ -1242,11 +1266,11 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
             // and using the Clearance Tool.  Without this, the chamfering bit would need
             // to machine out the centre of the valley as well as the walls.
 
-	          dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) converting path to wire ...\n", valley_num, num_valleys, min_depth, max_offset);
+	        dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) converting path to wire ...\n", valley_num, num_valleys, min_depth, max_offset);
             // Rotate this wire to align with the fixture.
             TopoDS_Wire wire(itPath->Wire());
 
-	          dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) aligning ...\n", valley_num, num_valleys, min_depth, max_offset);
+	        dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) aligning ...\n", valley_num, num_valleys, min_depth, max_offset);
             // Rotate this wire to align with the fixture.
             BRepBuilderAPI_Transform transform1(pMachineState->Fixture().GetMatrix(CFixture::YZ));
             transform1.Perform(wire, false);
@@ -1260,7 +1284,7 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
             transform3.Perform(wire, false);
             wire = TopoDS::Wire(transform3.Shape());
 
-	          dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) determining boundary sketch ...\n", valley_num, num_valleys, min_depth, max_offset);
+	        dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) determining boundary sketch ...\n", valley_num, num_valleys, min_depth, max_offset);
             HeeksObj *pBoundary = heeksCAD->NewSketch();
             if (heeksCAD->ConvertWireToSketch(wire, pBoundary, heeksCAD->GetTolerance()))
             {
@@ -1281,19 +1305,22 @@ Python CInlay::FormValleyPockets( CInlay::Valleys_t valleys, CMachineState *pMac
                 TopoDS_Wire pocket_area;
                 // DeterminePocketArea(pBoundary, pMachineState, &pocket_area);
 
-	              dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) generating pocketing code ...\n", valley_num, num_valleys, min_depth, max_offset);
+	            dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) instantiating pocket object ...\n", valley_num, num_valleys, min_depth, max_offset);
                 CPocket *pPocket = new CPocket( objects, m_params.m_clearance_tool );
                 pPocket->m_depth_op_params = m_depth_op_params;
                 pPocket->m_depth_op_params.m_final_depth = itPath->Depth();
                 pPocket->m_speed_op_params = m_speed_op_params;
+	            dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) generating pocketing code ...\n", valley_num, num_valleys, min_depth, max_offset);
                 python << pPocket->AppendTextToProgram(pMachineState);
+	            dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) disposing of pocket object ...\n", valley_num, num_valleys, min_depth, max_offset);
                 delete pPocket;		// We don't need it any more.
+	            dprintf("(valley_num %d/%d) (min_depth %g) (max_offset %g) ... done generating pocketing code.\n", valley_num, num_valleys, min_depth, max_offset);
 
                 // Reinstate the original fixture.
                 pMachineState->Fixture(save_fixture);
             } // End if - then
         } // End if - then
-	  dprintf("(valley_num %d/%d) done considering this valley.\n", valley_num, num_valleys);
+	    dprintf("(valley_num %d/%d) done considering this valley.\n", valley_num, num_valleys);
 	} // End for
 
 	dprintf("... Done.\n");
