@@ -4,6 +4,8 @@
 #include <BRepTools_WireExplorer.hxx>
 #include <TopoDS.hxx>
 
+#include "interface/TestMacros.h"
+
 /* static */ gp_Pnt CContour::_GetStart(const TopoDS_Edge &edge)
 {
     BRepAdaptor_Curve curve(edge);
@@ -50,8 +52,12 @@
         edges.end(),
         EdgeComparisonRefPt(gp_Pnt(0,0,0))
     );
+    int num_edges = edges.size();
+    int edge_num = 0;
 	for (std::vector<TopoDS_Edge>::iterator l_itEdge = edges.begin(); l_itEdge != edges.end(); l_itEdge++)
     {
+        edge_num++;
+        dprintf("(edge %d/%d) ...\n", edge_num, num_edges);
         EdgeComparison compare( *l_itEdge );
         std::partial_sort( l_itEdge+1, l_itEdge+2, edges.end(), compare );
     }
