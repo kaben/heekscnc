@@ -10,6 +10,10 @@
 #include "CTool.h"
 
 class CPocket;
+class CArea;
+class CCurve;
+class CVertex;
+class Span;
 
 class CPocketParams{
 public:
@@ -93,4 +97,33 @@ public:
 	static void GetOptions(std::list<Property *> *list);
 	static void ReadFromConfig();
 	static void WriteToConfig();
+
+    static void DetailSpan(Span &span);
+    static void DetailVertex(CVertex &vertex);
+    static void DetailCurve(CCurve &curve);
+    static void DetailArea(CArea &area);
+    // LibAREA conversion functions
+	static bool ConvertSketchesToArea(
+      std::list<HeeksObj *> &sketches,
+      CArea &area,
+      CMachineState *pMachineState
+    );
+	static bool ConvertCurveToSketch(
+      CCurve& curve,
+      HeeksObj *sketch,
+      CMachineState *pMachineState,
+      double z = 0.
+    );
+	static bool ConvertAreaToSketches(
+      CArea& area,
+      std::list<HeeksObj *> &sketches,
+      CMachineState *pMachineState,
+      double z = 0.
+    );
+    /* Possibly implement, if they look like they're needed. */
+	//static bool ConvertFaceToArea(const TopoDS_Face& face, CArea& area, double deviation);
+	//static bool ConvertWireToArea(const TopoDS_Wire& wire, CArea& area, double deviation);
+	//static bool ConvertEdgeToArea(const TopoDS_Edge& edge, CArea& area, double deviation);
+	//static bool ConvertAreaToFace(const CArea& area, std::list<TopoDS_Shape> &face);
+	//static bool ConvertAreaToWire(const CArea& area, std::list<TopoDS_Shape> &wire);
 };

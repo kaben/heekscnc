@@ -24,9 +24,15 @@
 #include "MachineState.h"
 #include "PocketDlg.h"
 
+/* LibAREA headers. */
+#include "Area.h"
+#include "Curve.h"
+
 #include "interface/TestMacros.h"
 
 #include <sstream>
+
+extern CHeeksCADInterface* heeksCAD;
 
 // static
 double CPocket::max_deviation_for_spline_to_arc = 0.1;
@@ -920,4 +926,416 @@ void CPocket::GetOnEdit(bool(**callback)(HeeksObj*))
 bool CPocket::Add(HeeksObj* object, HeeksObj* prev_object)
 {
 	return CDepthOp::Add(object, prev_object);
+}
+
+
+bool CPocket::ConvertSketchesToArea(
+  std::list<HeeksObj *> &sketches,
+  CArea &area,
+  CMachineState *pMachineState
+)
+{
+  dprintf("entered ...\n");
+  int num_curves = 0;
+
+  int num_children = sketches.size();
+  int child_num = 0;
+  dprintf("iterating through %d children to generate pockets ...\n", num_children);
+  for (std::list<HeeksObj *>::iterator it = sketches.begin(); it != sketches.end(); it++)
+  {
+    HeeksObj* object = *it;
+    child_num++;
+    dprintf("(child_num %d/%d) considering object ...\n", child_num, num_children);
+    if (object->GetType() != SketchType) {
+      dprintf("(child_num %d/%d) skipping non-sketch object ...\n", child_num, num_children);
+      continue;   // Skip private fixture objects.
+    }
+    if(object == NULL) {
+      dprintf("(child_num %d/%d) skipping null object ...\n", child_num, num_children);
+      continue;
+    }
+    if (object->GetNumChildren() == 0){
+      dprintf("(child_num %d/%d) skipping object with no children ...\n", child_num, num_children);
+      continue;
+    }
+
+    dprintf("(child_num %d/%d) GetSketchOrder(...) ...\n", child_num, num_children);
+    HeeksObj* re_ordered_sketch = NULL;
+    SketchOrderType order = heeksCAD->GetSketchOrder(object);
+    dprintf("(child_num %d/%d) considering whether to reorder ...\n", child_num, num_children);
+    if(
+      (order != SketchOrderTypeCloseCW) &&
+      (order != SketchOrderTypeCloseCCW) &&
+      (order != SketchOrderTypeMultipleCurves) &&
+      (order != SketchOrderHasCircles))
+    {
+      dprintf("(child_num %d/%d) reordering ...\n", child_num, num_children);
+      re_ordered_sketch = object->MakeACopy();
+      dprintf("(child_num %d/%d) ReOrderSketch(...) ...\n", child_num, num_children);
+      heeksCAD->ReOrderSketch(re_ordered_sketch, SketchOrderTypeReOrder);
+      object = re_ordered_sketch;
+      dprintf("(child_num %d/%d) GetSketchOrder(...) (again) ...\n", child_num, num_children);
+      order = heeksCAD->GetSketchOrder(object);
+      if(
+        (order != SketchOrderTypeCloseCW) &&
+        (order != SketchOrderTypeCloseCCW) &&
+        (order != SketchOrderTypeMultipleCurves) &&
+        (order != SketchOrderHasCircles))
+      {
+        switch(heeksCAD->GetSketchOrder(object)) {
+        case SketchOrderTypeOpen: {
+            dprintf("(child_num %d/%d) skipping unclosed sketch ...\n", child_num, num_children);
+            delete re_ordered_sketch;
+            continue;
+          }
+          break;
+
+        default: {
+            dprintf("(child_num %d/%d) skipping badly-ordered sketch ...\n", child_num, num_children);
+            delete re_ordered_sketch;
+            continue;
+          }
+          break;
+        }
+      }
+    }
+
+    if(object == NULL) {
+      dprintf("(child_num %d/%d) skipping null object generated during reordering ...\n", child_num, num_children);
+    } else {
+      dprintf("(child_num %d/%d) converting to libAREA format ...\n", child_num, num_children);
+      CCurve curve;
+      bool started = false;
+      double prev_e[3];
+
+      // Extract sketch elements for analysis.
+      std::list<HeeksObj*> new_spans;
+      for(HeeksObj* span = object->GetFirstChild(); span; span = object->GetNextChild()) {
+        if(span->GetType() == SplineType) {
+            heeksCAD->SplineToBiarcs(span, new_spans, CPocket::max_deviation_for_spline_to_arc);
+        } else { new_spans.push_back(span->MakeACopy()); }
+      }
+      // Analyze each sketch element, and load into area object.
+      for(std::list<HeeksObj*>::iterator It = new_spans.begin(); It != new_spans.end(); It++) {
+        HeeksObj* span_object = *It;
+        double s[3] = {0, 0, 0};
+        double e[3] = {0, 0, 0};
+        double c[3] = {0, 0, 0};
+        
+        if(span_object){
+          int type = span_object->GetType();
+          if(type == LineType || type == ArcType) {
+            span_object->GetStartPoint(s);
+#ifdef STABLE_OPS_ONLY
+            CNCPoint start(s);
+#else
+            CNCPoint start(pMachineState->Fixture().Adjustment(s));
+#endif
+            // FIXME: I think this is checking to see whether the current start
+            // point matches end point. Goal seems to be ending an unclosed
+            // curve, and adding it to pocketing object.  Looks like check is
+            // wrong: there should be an AND (&&), not an OR (||), between
+            // distance checks along each axis.
+            //
+            // Unless this somehow forces closure of unclosed curves?
+            //
+            // Now that I look at it more closely, I think that it checks
+            // whether the new startpoint is within 0.0001 of the previous
+            // endpoint, and if so, continues the curve. Otherwise it forces
+            // start of a new curve.
+            if(started && (fabs(s[0] - prev_e[0]) > 0.0001 || fabs(s[1] - prev_e[1]) > 0.0001)) {
+              // Complete the curve, load into area object, and get ready
+              // for next curve.
+              area.append(curve);
+              curve.m_vertices.clear();
+              started = false;
+              num_curves++;
+              //gcode << _T("a.append(c)\n");
+            }
+
+            // Check whether to start a new curve.
+            if(!started) {
+              curve.append(CVertex(0, Point(start.X(true), start.Y(true)), Point()));
+              started = true;
+              //gcode << _T("c = area.Curve()\n");
+            }
+
+            // Now handle the other end of the edge or arc.
+            span_object->GetEndPoint(e);
+            memcpy(prev_e, e, 3*sizeof(double));
+#ifdef STABLE_OPS_ONLY
+            CNCPoint end(e);
+#else
+            CNCPoint end(pMachineState->Fixture().Adjustment(e));
+#endif
+            if(type == LineType) {
+              curve.append(
+                CVertex(
+                  0,
+                  Point(end.X(true), end.Y(true)),
+                  Point()
+                )
+              );
+              //gcode << _T("c.append(area.Vertex(0, area.Point(") << end.X(true) << _T(", ") << end.Y(true) << _T("), area.Point(0, 0)))\n");
+            } else if(type == ArcType) {
+              span_object->GetCentrePoint(c);
+#ifdef STABLE_OPS_ONLY
+              CNCPoint centre(c);
+#else
+              CNCPoint centre(pMachineState->Fixture().Adjustment(c));
+#endif
+              double pos[3];
+              heeksCAD->GetArcAxis(span_object, pos);
+              int span_type = (pos[2] >=0) ? 1:-1;
+              curve.append(
+                CVertex(
+                  span_type,
+                  Point(end.X(true), end.Y(true)),
+                  Point(centre.X(true), centre.Y(true))
+                )
+              );
+              //gcode << _T("c.append(area.Vertex(") << span_type << _T(", area.Point(") << end.X(true) << _T(", ") << end.Y(true);
+              //gcode << _T("), area.Point(") << centre.X(true) << _T(", ") << centre.Y(true) << _T(")))\n");
+            }
+            memcpy(prev_e, e, 3*sizeof(double));
+          } else {
+            // Handle circles.
+            if (type == CircleType) {
+              // Since circle is its own entity, any in-progress object should
+              // be completed. XXX: There shouldn't actually be any in-progress
+              // objects; they should have been previously closed. But...
+              if(started) {
+                // Complete the curve, load into pocketing object, and get
+                // ready for next curve.
+                area.append(curve);
+                curve.m_vertices.clear();
+                //gcode << _T("a.append(c)\n");
+                started = false;
+                // FIXME: Since the previous curve wasn't
+                // properly closed, it may cause problems
+                // later.
+              }
+
+              std::list< std::pair<int, gp_Pnt > > points;
+              span_object->GetCentrePoint(c);
+
+              // Setup the four arcs that will make up the circle using UNadjusted
+              // coordinates first so that the offsets align with the X and Y axes.
+              double radius = heeksCAD->CircleGetRadius(span_object);
+
+              points.push_back( std::make_pair(0, gp_Pnt( c[0], c[1] + radius, c[2] )) ); // north
+              points.push_back( std::make_pair(-1, gp_Pnt( c[0] + radius, c[1], c[2] )) ); // east
+              points.push_back( std::make_pair(-1, gp_Pnt( c[0], c[1] - radius, c[2] )) ); // south
+              points.push_back( std::make_pair(-1, gp_Pnt( c[0] - radius, c[1], c[2] )) ); // west
+              points.push_back( std::make_pair(-1, gp_Pnt( c[0], c[1] + radius, c[2] )) ); // north
+
+#ifdef STABLE_OPS_ONLY
+              CNCPoint centre(c);
+#else
+              CNCPoint centre(pMachineState->Fixture().Adjustment(c));
+#endif
+
+              //gcode << _T("c = area.Curve()\n");
+              curve.m_vertices.clear();
+              for (std::list< std::pair<int, gp_Pnt > >::iterator l_itPoint = points.begin(); l_itPoint != points.end(); l_itPoint++) {
+#ifdef STABLE_OPS_ONLY
+                CNCPoint pnt( l_itPoint->second );
+#else
+                CNCPoint pnt = pMachineState->Fixture().Adjustment( l_itPoint->second );
+#endif
+
+                curve.append(
+                  CVertex(
+                    l_itPoint->first,
+                    Point(pnt.X(true), pnt.Y(true)),
+                    Point(centre.X(true), centre.Y(true))
+                  )
+                );
+                //gcode << _T("c.append(area.Vertex(") << l_itPoint->first << _T(", area.Point(");
+                //gcode << pnt.X(true) << (_T(", ")) << pnt.Y(true);
+                //gcode << _T("), area.Point(") << centre.X(true) << _T(", ") << centre.Y(true) << _T(")))\n");
+              } // End for
+              // Complete the curve, load into pocketing object, and get ready
+              // for next curve.
+              area.append(curve);
+              curve.m_vertices.clear();
+              num_curves++;
+              //gcode << _T("a.append(c)\n");
+            }
+          } // End if - else
+        }
+      }
+
+      // XXX: There shouldn't actually be any in-progress objects; they should
+      // have been previously closed. But...
+      if(started) {
+        // Complete the curve, load into pocketing object, and get ready for
+        // next curve.
+        area.append(curve);
+        curve.m_vertices.clear();
+        started = false;
+        num_curves++;
+        //gcode << _T("a.append(c)\n");
+        // FIXME: Since the previous curve wasn't properly closed,
+        // it may cause problems later.
+      }
+
+      // delete the spans made
+      for(std::list<HeeksObj*>::iterator It = new_spans.begin(); It != new_spans.end(); It++) {
+        HeeksObj* span = *It;
+        delete span;
+      }
+    }
+
+    if(re_ordered_sketch) { delete re_ordered_sketch; }
+    dprintf("(child_num %d/%d) ... done considering this child.\n", child_num, num_children);
+  } // End for
+
+  // Pocket the area
+  double did_generate_pocket = false;
+  if (0 < num_curves) {
+    // Reorder the area. The outside curves must be made anti-clockwise and
+    // the insides clockwise.
+    dprintf("generating pocket toolpath ...\n");
+    area.Reorder();
+    // std::list<CCurve> curve_list;
+    // //double tool_radius = CTool::Find( m_params.m_clearance_tool)->CuttingRadius();
+    // //double extra_offset = 0.;
+    // //double stepover = tool_radius;
+	// CAreaPocketParams params(
+    //   tool_radius,
+    //   extra_offset,
+    //   stepover, from_center, use_zig_zag ? ZigZagPocketMode : SpiralPocketMode, zig_angle);
+    // area.MakePocketToolpath(curve_list, tool_radius, extra_offset, stepover);
+    // did_generate_pocket = true;
+    //python << _T("a.Reorder()\n");
+
+    // start - assume we are at a suitable clearance height
+
+    // make a parameter of area_funcs.pocket() eventually
+    // 0..plunge, 1..ramp, 2..helical
+    //python << _T("entry_style = ") <<  m_pocket_params.m_entry_move << _T("\n");
+    //python << _T("area_funcs.pocket(a, tool_diameter/2, ");
+    //python << m_pocket_params.m_material_allowance / theApp.m_program->m_units;
+    //python << _T(", rapid_safety_space, start_depth, final_depth, ");
+    //python << m_pocket_params.m_step_over / theApp.m_program->m_units;
+    //python << _T(", step_down, clearance, ");
+    //python << m_pocket_params.m_starting_place;
+    //python << (m_pocket_params.m_keep_tool_down_if_poss ? _T(", True") : _T(", False"));
+    //python << (m_pocket_params.m_use_zig_zag ? _T(", True") : _T(", False"));
+    //python << _T(", ") << m_pocket_params.m_zig_angle;
+    //python << _T(",") << (m_pocket_params.m_zig_unidirectional ? _T("True") : _T("False"));
+    //python << _T(")\n");
+  } else {
+    dprintf("the area contains no curves, so a pocket toolpath cannot be generated ...\n");
+    did_generate_pocket = false;
+    //python << _T("\n");
+    //python << _T("comment('In the python code that generated this gcode,')\n");
+    //python << _T("comment('an area was created that lacks sufficient curves')\n");
+    //python << _T("comment('to successfully call the pocketing function,')\n");
+    //python << _T("comment('wherefore I refuse cowardly to even try')\n");
+    //python << _T("comment('because I think I might crash if I do.')\n");
+    //python << _T("\n");
+  }
+
+  // rapid back up to clearance plane
+  //python << _T("rapid(z = clearance)\n");
+
+  dprintf("... done.\n");
+  //return(python);
+  return did_generate_pocket;
+}
+
+void CPocket::DetailSpan(Span &span)
+{
+  dprintf("  span: is_start_span:%d, p:(%g, %g), v.type:%d, v.p:(%g, %g), v.c:(%g, %g)\n",
+    span.m_start_span,
+    span.m_p.x, span.m_p.y,
+    span.m_v.m_type,
+    span.m_v.m_p.x, span.m_v.m_p.y,
+    span.m_v.m_c.x, span.m_v.m_c.y
+  );
+}
+
+void CPocket::DetailVertex(CVertex &vertex)
+{
+  dprintf("  vertex: type:%d, p:(%g, %g), c:(%g, %g)\n",
+    vertex.m_type,
+    vertex.m_p.x, vertex.m_p.y,
+    vertex.m_c.x, vertex.m_c.y
+  );
+}
+
+void CPocket::DetailCurve(CCurve &curve)
+{
+  dprintf("entered ...\n");
+  dprintf("new curve ...\n");
+  dprintf("IsClosed():%d\n", curve.IsClosed());
+  dprintf("IsClockwise():%d\n", curve.IsClockwise());
+  dprintf("as vertices:\n");
+  for(std::list<CVertex>::iterator v = curve.m_vertices.begin(); v != curve.m_vertices.end(); v++){
+    DetailVertex(*v);
+  }
+  dprintf("as spans:\n");
+  std::list<Span> spans;
+  curve.GetSpans(spans);
+  for(std::list<Span>::iterator s = spans.begin(); s != spans.end(); s++){
+    DetailSpan(*s);
+  }
+  dprintf("... done.\n");
+}
+
+void CPocket::DetailArea(CArea &area)
+{
+  dprintf("entered ...\n");
+  for(std::list<CCurve>::iterator c = area.m_curves.begin(); c != area.m_curves.end(); c++){
+    dprintf("new curve ...\n");
+    DetailCurve(*c);
+  }
+  dprintf("... done.\n");
+}
+
+bool CPocket::ConvertCurveToSketch(CCurve& curve, HeeksObj *sketch, CMachineState *pMachineState, double z)
+{
+  //dprintf("entered ...\n");
+  std::list<Span> spans;
+  curve.GetSpans(spans);
+  //int num_spans = spans.size();
+  //int span_num = 0;
+  //dprintf("converting %d spans ...\n", num_spans);
+  for(std::list<Span>::iterator s = spans.begin(); s != spans.end(); s++){
+    //span_num++;
+    //dprintf("(span %d/%d) converting span ...\n", span_num, num_spans);
+    //DetailSpan(*s);
+    double start[3]; start[0] = s->m_p.x; start[1] = s->m_p.y; start[2] = z;
+    double end[3]; end[0] = s->m_v.m_p.x; end[1] = s->m_v.m_p.y; end[2] = z;
+    if(0 == s->m_v.m_type){
+      // Line.
+      //dprintf("(span %d/%d) span is a line ...\n", span_num, num_spans);
+      sketch->Add(heeksCAD->NewLine(start, end), NULL);
+    } else {
+      // Arc.
+      //dprintf("(span %d/%d) span is an arc ...\n", span_num, num_spans);
+      double centre[3]; centre[0] = s->m_v.m_c.x; centre[1] = s->m_v.m_c.y; centre[2] = z;
+      double up[3]; up[0] = up[1] = 0; up[2] = s->m_v.m_type; // 1: counterclockwise; -1: clockwise
+      sketch->Add(heeksCAD->NewArc(start, end, centre, up), NULL);
+    }
+  }
+  //dprintf("... done.\n");
+  return true;
+}
+
+bool CPocket::ConvertAreaToSketches(CArea& area, std::list<HeeksObj *> &sketches, CMachineState *pMachineState, double z)
+{
+  dprintf("entered ...\n");
+  dprintf("z: %g ...\n", z);
+  dprintf("converting curves to sketches ...\n");
+  for(std::list<CCurve>::iterator c = area.m_curves.begin(); c != area.m_curves.end(); c++){
+    HeeksObj *sketch = heeksCAD->NewSketch();
+    ConvertCurveToSketch(*c, sketch, pMachineState, z);
+    sketches.push_back(sketch);
+  }
+  dprintf("... done converting curves to sketches.\n");
+  dprintf("... done.\n");
+  return true;
 }
