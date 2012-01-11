@@ -372,13 +372,18 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       );
 
       std::list<CCurve> toolpath;
-	  dprintf("SplitAndMakePocketToolpath() ...\n");
+	  dprintf("Reorder() ...\n");
       area.Reorder();
-      area.SplitAndMakePocketToolpath(toolpath, params);
-	  dprintf("... SplitAndMakePocketToolpath() done.\n");
+	  dprintf("... Reorder() done.\n");
+	  //dprintf("SplitAndMakePocketToolpath() ...\n");
+      //area.SplitAndMakePocketToolpath(toolpath, params);
+	  //dprintf("... SplitAndMakePocketToolpath() done.\n");
+	  dprintf("RecursivePocket() ...\n");
+      area.RecursivePocket(toolpath, params);
+	  dprintf("... RecursivePocket() done.\n");
 
       std::list<HeeksObj *> sketches;
-      double z = 0.;
+      double z = 1.;
       int num_curves = toolpath.size();
       int curve_num = 0;
       dprintf("converting %d curves ...\n", num_curves);
