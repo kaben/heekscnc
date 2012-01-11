@@ -288,6 +288,14 @@ public:
 											const double clearance_height,
 											const double rapid_down_to_height );
 
+	static Python GeneratePathFromSketches(
+    std::list<HeeksObj *> &sketches,
+    CMachineState *pMachineState,
+    const double clearance_height,
+    const double rapid_down_to_height,
+    const double start_depth
+  );
+
 	static bool Clockwise( const gp_Circ & circle );
 	void ReloadPointers();
 	static void GetOptions(std::list<Property *> *list);

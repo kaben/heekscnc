@@ -307,14 +307,122 @@ const wxBitmap &CInlay::GetIcon()
 
 Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 {
-	dprintf("Hi!\n");
-	dprintf("... done instantiating CArea.\n");
-
     Python python;
 
 	ReloadPointers();
 
 	python << CDepthOp::AppendTextToProgram( pMachineState );
+
+	dprintf("ConvertSketchesToArea(children, area, pMachineState) ...\n");
+    CArea area;
+    bool result = false;
+	std::list<HeeksObj *> children(GetChildren());
+    result = CPocket::ConvertSketchesToArea(children, area, pMachineState);
+	dprintf("... ConvertSketchesToArea(children, area, pMachineState) done.\n");
+    dprintf("DetailArea(area) ...\n");
+    CPocket::DetailArea(area);
+    dprintf("... DetailArea(area) done.\n");
+
+    if(false){
+      /* Demonstration: convert an area to a list of sketches. */
+      dprintf("ConvertAreaToSketches(area, sketches, pMachineState) ...\n");
+      std::list<HeeksObj *> sketches;
+      result = CPocket::ConvertAreaToSketches(area, sketches, pMachineState, 2.0);
+      dprintf("... ConvertAreaToSketches(area, sketches, pMachineState) done.\n");
+
+      dprintf("GeneratePathFromSketches(sketches, pMachineState) ...\n");
+      python << GeneratePathFromSketches(
+        sketches,
+        pMachineState,
+        m_depth_op_params.ClearanceHeight(),
+        m_depth_op_params.m_rapid_safety_space,
+        m_depth_op_params.m_start_depth
+      );
+      dprintf("... GeneratePathFromSketches(sketches, pMachineState) done.\n");
+
+      dprintf("ConvertSketchesToArea(sketches, a2, pMachineState) ...\n");
+      CArea a2;
+      result = CPocket::ConvertSketchesToArea(sketches, a2, pMachineState);
+      dprintf("... ConvertSketchesToArea(sketches, a2, pMachineState) done.\n");
+      dprintf("DetailArea(a2) ...\n");
+      CPocket::DetailArea(a2);
+      dprintf("... DetailArea(a2) done.\n");
+    }
+
+    if(true){
+	  dprintf("building CAreaPocketParams() ...\n");
+      //double tool_radius = CTool::Find(m_tool_number)->CuttingRadius();
+      double tool_radius = 1.5;
+      double extra_offset = 0.;
+      //double stepover = tool_radius;
+      double stepover = 1.;
+      //bool from_center = false;
+      bool from_center = true;
+      PocketMode pocket_mode = SpiralPocketMode;
+      //bool use_zig_zag = false;
+      double zig_angle = 0.;
+      CAreaPocketParams params(
+        tool_radius,
+        extra_offset,
+        stepover,
+        from_center,
+        pocket_mode,
+        //use_zig_zag ? ZigZagPocketMode : SpiralPocketMode,
+        zig_angle
+      );
+
+      std::list<CCurve> toolpath;
+	  dprintf("SplitAndMakePocketToolpath() ...\n");
+      area.Reorder();
+      area.SplitAndMakePocketToolpath(toolpath, params);
+	  dprintf("... SplitAndMakePocketToolpath() done.\n");
+
+      std::list<HeeksObj *> sketches;
+      double z = 0.;
+      int num_curves = toolpath.size();
+      int curve_num = 0;
+      dprintf("converting %d curves ...\n", num_curves);
+      for(std::list<CCurve>::iterator c = toolpath.begin(); c != toolpath.end(); c++){
+        curve_num++;
+        dprintf("(curve %d/%d) converting curve ...\n", curve_num, num_curves);
+        z += 1.;
+        c->RemoveTinySpans();
+        HeeksObj *sketch = heeksCAD->NewSketch();
+        CPocket::ConvertCurveToSketch(*c, sketch, pMachineState, z);
+        //std::list<TopoDS_Shape> wires;
+        //dprintf("(curve %d/%d) ConvertSketchToFaceOrWire() ...\n", curve_num, num_curves);
+        //if (heeksCAD->ConvertSketchToFaceOrWire(sketch, wires, false)){
+        //  dprintf("success!\n");
+        //}
+        sketches.push_back(sketch);
+      }
+      dprintf("... done converting %d curves.\n", num_curves);
+      
+      dprintf("GeneratePathFromSketches(sketches, pMachineState) ...\n");
+      python << GeneratePathFromSketches(
+        sketches,
+        pMachineState,
+        m_depth_op_params.ClearanceHeight(),
+        m_depth_op_params.m_rapid_safety_space,
+        m_depth_op_params.m_start_depth
+      );
+      dprintf("... GeneratePathFromSketches(sketches, pMachineState) done.\n");
+
+      //int num_sketches = sketches.size();
+      //int sketch_num = 0;
+      //dprintf("converting %d sketches ...\n", num_sketches);
+      //for(std::list<HeeksObj *>::iterator s = sketches.begin(); s != sketches.end(); s++){
+      //  sketch_num++;
+      //  CProfile *profile = new CProfile();
+      //  python << profile->AppendTextForOneSketch(*s, pMachineState, CProfileParams::eClimb);
+
+      //}
+    }
+
+
+    return python;
+
+
 
 	CTool *pChamferingBit = CTool::Find( m_tool_number );
 
@@ -476,6 +584,76 @@ Python CInlay::SelectFixture( CMachineState *pMachineState, const bool female_ha
     return(offset);
 }
 
+/* static */ Python CInlay::GeneratePathFromSketches(
+  std::list<HeeksObj *> &sketches,
+  CMachineState *pMachineState,
+  const double clearance_height,
+  const double rapid_down_to_height,
+  const double start_depth
+)
+{
+  dprintf("entered ...\n");
+  Python python;
+  int num_children = sketches.size();
+  int child_num = 0;
+  dprintf("iterating through %d children ...\n", num_children);
+  for (std::list<HeeksObj *>::iterator it = sketches.begin(); it != sketches.end(); it++){
+    HeeksObj *object = *it;
+    child_num++;
+    dprintf("(child_num %d/%d) considering new child ...\n", child_num, num_children);
+    if (object->GetType() != SketchType) {
+      dprintf("(child_num %d/%d) skipping non-sketch child ...\n", child_num, num_children);
+      continue;
+    }
+  
+    // Convert them to a list of wire objects.
+    dprintf("(child_num %d/%d) converting to list of wires ...\n", child_num, num_children);
+    std::list<TopoDS_Shape> wires;
+    dprintf("(child_num %d/%d) ConvertSketchToFaceOrWire() ...\n", child_num, num_children);
+    if (heeksCAD->ConvertSketchToFaceOrWire( object, wires, false))
+    {
+      // The wire(s) represent the sketch objects for a tool path.
+      int num_wires = wires.size();
+      int wire_num = 0;
+      try {
+        // For all wires in this sketch...
+        dprintf("(child_num %d/%d) iterating through %d wires ...\n", child_num, num_children, num_wires);
+        for(std::list<TopoDS_Shape>::iterator It2 = wires.begin(); It2 != wires.end(); It2++) {
+          wire_num++;
+          dprintf("(child_num %d/%d) (wire_num %d/%d) fixing wire order ...\n", child_num, num_children, wire_num, num_wires);
+          TopoDS_Shape& wire_to_fix = *It2;
+          ShapeFix_Wire fix;
+          dprintf("(child_num %d/%d) (wire_num %d/%d) fix.Load(TopoDS::Wire(wire_to_fix)) ...\n", child_num, num_children, wire_num, num_wires);
+          fix.Load( TopoDS::Wire(wire_to_fix) );
+          dprintf("(child_num %d/%d) (wire_num %d/%d) fix.FixReorder() ...\n", child_num, num_children, wire_num, num_wires);
+          fix.FixReorder();
+  
+          dprintf("(child_num %d/%d) (wire_num %d/%d) converting fix back to wire ...\n", child_num, num_children, wire_num, num_wires);
+          dprintf("(child_num %d/%d) (wire_num %d/%d) fix.Wire() ...\n", child_num, num_children, wire_num, num_wires);
+          TopoDS_Shape shape = fix.Wire();
+          dprintf("(child_num %d/%d) (wire_num %d/%d) TopoDS::Wire(shape) ...\n", child_num, num_children, wire_num, num_wires);
+          TopoDS_Wire wire = TopoDS::Wire(shape);
+          dprintf("(child_num %d/%d) (wire_num %d/%d) CContour::GeneratePathFromWire(...) ...\n", child_num, num_children, wire_num, num_wires);
+          python << CContour::GeneratePathFromWire(
+            wire,
+            pMachineState,
+            clearance_height,
+            rapid_down_to_height,
+            start_depth,
+            CContourParams::ePlunge
+          );
+          dprintf("(child_num %d/%d) (wire_num %d/%d) ... CContour::GeneratePathFromWire(...) done.\n", child_num, num_children, wire_num, num_wires);
+        }
+        dprintf("(child_num %d/%d) ... done iterating through %d wires.\n", child_num, num_children, num_wires);
+      } catch (Standard_Failure & error) {
+        (void) error;	// Avoid the compiler warning.
+        Handle_Standard_Failure e = Standard_Failure::Caught();
+  	  } // End catch
+    }
+  }
+  dprintf("... done.\n");
+  return python;
+}
 
 /**
 	This method finds the angle that the corner-forming vector would form.  It's 180 degrees
@@ -921,6 +1099,12 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 	double tolerance = heeksCAD->GetTolerance();
 	typedef double Depth_t;
 	CTool *pChamferingBit = CTool::Find( m_tool_number );
+
+    /* Demonstration: convert an area to a list of sketches. */
+	//dprintf("ConvertAreaToSketches(...) ...\n");
+	//std::list<HeeksObj *> sketches;
+    //result = CPocket::ConvertAreaToSketches(area, sketches, pMachineState);
+	//dprintf("... ConvertAreaToSketches(...) done.\n");
 
     // For all selected sketches.
 	int num_children = GetNumChildren();
