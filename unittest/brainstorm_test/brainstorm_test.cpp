@@ -53,14 +53,40 @@ TEST(TestSuite, testIntegerLighter)
     EXPECT_LT(a,b);
 }
 
+template<typename _RandomAccessIterator>
+inline void adaptive_merge_sort(
+  _RandomAccessIterator __first,
+  _RandomAccessIterator __last
+){
+  int length = __last - __first;
+  if(length <= 1) return;
+  _RandomAccessIterator __middle = __first + length / 2;
+  adaptive_merge_sort(__first, __middle);
+  adaptive_merge_sort(__middle, __last);
+  if(*(__middle - 1) < *__middle) return;
+  inplace_merge(__first, __middle, __last);
+}
+
 template<typename _RandomAccessIterator, typename _Compare>
-  inline void
-  partial_sort(_RandomAccessIterator __first,
-	 _RandomAccessIterator __middle,
-	 _RandomAccessIterator __last,
-	 _Compare __comp)
-  {
-  }
+inline void adaptive_merge_sort(
+  _RandomAccessIterator __first,
+  _RandomAccessIterator __last,
+  _Compare __comp
+){
+  int length = __last - __first;
+  if(length <= 1) return;
+  _RandomAccessIterator __middle = __first + length / 2;
+  adaptive_merge_sort(__first, __middle, __comp);
+  adaptive_merge_sort(__middle, __last, __comp);
+  if(__comp(*(__middle - 1), *__middle)) return;
+  inplace_merge(__first, __middle, __last, __comp);
+}
+
+struct Comparison : public std::binary_function<const int &, const int &, bool >
+{
+  bool operator()(const int &l, const int &r) const { return l<r; }
+};
+
 TEST(MyAdaptivePartialSortTestSuite, brainstorm)
 {
   vector<int> myints;
@@ -71,6 +97,29 @@ TEST(MyAdaptivePartialSortTestSuite, brainstorm)
   myints.push_back(6);
   myints.push_back(4);
   myints.push_back(9);
+
+  vector<int>::iterator it;
+  int i = 0;
+
+  it = myints.begin();
+  i = 0;
+  for (; it != myints.end(); it++) {
+    cout << "i: " << ++i << endl;
+    cout << "it: " << *it << endl;
+  }
+  cout << endl;
+
+  adaptive_merge_sort(myints.begin(), myints.end(), Comparison());
+
+  it = myints.begin();
+  i = 0;
+  for (; it != myints.end(); it++) {
+    cout << "i: " << ++i << endl;
+    cout << "it: " << *it << endl;
+  }
+  cout << endl;
+
+  //blah_merge_sort(myints.begin(), myints.begin() + 1);
 }
 
 TEST(StdMinElementTestSuite, testIteration)
