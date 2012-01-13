@@ -1,0 +1,899 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<HeeksCAD_Document>
+    <Program machine="emc2b_crc" output_file="/tmp/test.tap" output_file_name_follows_data_file_name="1" program="# coding=UTF8&#x0A;# No troubled Microsoft Windows detected&#x0A;import sys&#x0A;sys.path.insert(0,&apos;/usr/lib/heekscnc/&apos;)&#x0A;import math&#x0A;try:&#x0A;  import psyco&#x0A;  psyco.full()&#x0A;except ImportError:&#x0A;  pass&#x0A;import area&#x0A;area.set_units(1)&#x0A;import area_funcs&#x0A;from nc.nc import *&#x0A;import nc.emc2b_crc&#x0A;&#x0A;output(&apos;/home/kaben/201112171454_concentric_pockets.tap&apos;)&#x0A;program_begin(123, &apos;Test program&apos;)&#x0A;absolute()&#x0A;metric()&#x0A;set_plane(0)&#x0A;&#x0A;comment(&apos;Feeds and Speeds set for machining Please select a material to machine&apos;)&#x0A;#(3 mm Carbide Slot Cutter)&#x0A;tool_defn( id=1, name=&apos;3 mm Carbide Slot Cutter&apos;, radius=1.5, length=15, gradient=-0.1)&#x0A;#(6 mm Carbide Slot Cutter)&#x0A;tool_defn( id=2, name=&apos;6 mm Carbide Slot Cutter&apos;, radius=3, length=63.5, gradient=-0.1)&#x0A;#(6 mm Carbide Ball End Mill)&#x0A;tool_defn( id=3, name=&apos;6 mm Carbide Ball End Mill&apos;, radius=3, length=63.5, gradient=-0.1)&#x0A;#(21 degreee Engraving Bit)&#x0A;tool_defn( id=4, name=&apos;21 degreee Engraving Bit&apos;, radius=1.5, length=63.5, gradient=0)&#x0A;#(15.98 mm Carbide Slot Cutter)&#x0A;tool_defn( id=5, name=&apos;15.98 mm Carbide Slot Cutter&apos;, radius=7.99, length=63.5, gradient=-0.1)&#x0A;#(45 degreee Chamfering Bit)&#x0A;tool_defn( id=26, name=&apos;45 degreee Chamfering Bit&apos;, radius=1.5, length=63.5, gradient=0)&#x0A;workplane(1)&#x0A;comment(&apos;tool change to 3 mm Carbide Slot Cutter&apos;)&#x0A;tool_change( id=1)&#x0A;spindle(7000)&#x0A;feedrate_hv(840, 593.97)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1.5)&#x0A;final_depth = float(-2)&#x0A;tool_diameter = float(3)&#x0A;cutting_edge_angle = float(0)&#x0A;#absolute() mode&#x0A;a = area.Area()&#x0A;entry_moves = []&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(84.20626766, 19.29679591), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(82.07707507, 17.45184002), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(79.28842581, 17.05089279), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(76.72569633, 18.22125213), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(75.20253513, 20.59133722), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(75.20253513, 23.40866278), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(76.72569633, 25.77874787), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(79.28842581, 26.94910721), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(82.07707507, 26.54815998), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(84.20626766, 24.70320409), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(85, 22), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(84.20626766, 19.29679591), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(89.55572806, 20.05244826), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(88.26238774, 17.36679942), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(86.23489802, 15.18168518), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(83.65341024, 13.69126251), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(80.74730094, 13.02796203), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(77.77479066, 13.25072088), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(75, 14.33974596), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(72.66948128, 16.19827262), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(70.99031132, 18.66116261), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(70.11169174, 21.50957734), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(70.11169174, 24.49042266), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(70.99031132, 27.33883739), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(72.66948128, 29.80172738), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(75, 31.66025404), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(77.77479066, 32.74927912), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(80.74730094, 32.97203797), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(83.65341024, 32.30873749), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(86.23489802, 30.81831483), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(88.26238774, 28.63320058), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(89.55572806, 25.94755174), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(90, 23), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(89.55572806, 20.05244826), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(99.76560848, 21.94701432), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(99.06792784, 18.96558803), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(97.92331114, 16.12560324), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(96.35858722, 13.4936268), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(94.41043187, 11.13134998), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(92.12450822, 9.094142575), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(89.55439637, 7.429754982), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(86.76033757, 6.17719904), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(83.80782218, 5.3658336), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(80.76605467, 5.014676379), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(77.70633149, 5.131958205), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(74.70036996, 5.714930091), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(71.81862726, 6.74992767), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(69.128649, 8.212691477), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(66.693486, 10.06893557), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(64.5702164, 12.27515115), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(62.80860786, 14.77962641), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(61.44995098, 17.52365856), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(60.52609152, 20.44292982), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(60.05868398, 23.46901494), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(60.05868398, 26.53098506), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(60.52609152, 29.55707018), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(61.44995098, 32.47634144), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(62.80860786, 35.22037359), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(64.5702164, 37.72484885), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(66.693486, 39.93106443), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(69.128649, 41.78730852), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(71.81862726, 43.25007233), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(74.70036996, 44.28506991), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(77.70633149, 44.8680418), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(80.76605467, 44.98532362), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(83.80782218, 44.6341664), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(86.76033757, 43.82280096), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(89.55439637, 42.57024502), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(92.12450822, 40.90585743), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(94.41043187, 38.86865002), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(96.35858722, 36.5063732), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(97.92331114, 33.87439676), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(99.06792784, 31.03441197), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(99.76560848, 28.05298568), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(100, 25), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(99.76560848, 21.94701432), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(94.69294912, 20.9805222), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(93.78436717, 18.08466217), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(92.31145162, 15.43097677), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(90.33450379, 13.12810819), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(87.93446015, 11.27033614), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(85.20957879, 9.933718018), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(82.27141666, 9.172975135), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(79.24026247, 9.019252392), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(76.24021202, 9.478843217), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(73.39408773, 10.53293191), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(70.81841026, 12.13836395), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(68.61862816, 14.22941276), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(66.88480076, 16.72047056), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(65.68791115, 19.50955315), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(65.07696015, 22.48247517), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(65.07696015, 25.51752483), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(65.68791115, 28.49044685), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(66.88480076, 31.27952944), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(68.61862816, 33.77058724), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(70.81841026, 35.86163605), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(73.39408773, 37.46706809), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(76.24021202, 38.52115678), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(79.24026247, 38.98074761), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(82.27141666, 38.82702486), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(85.20957879, 38.06628198), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(87.93446015, 36.72966386), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(90.33450379, 34.87189181), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(92.31145162, 32.56902323), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(93.78436717, 29.91533783), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(94.69294912, 27.0194778), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(95, 24), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(94.69294912, 20.9805222), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;a.Reorder()&#x0A;entry_style = 0&#x0A;if a.num_curves() &lt; 1:&#x0A;    comment(&apos;In the python code that generated this gcode,&apos;)&#x0A;    comment(&apos;an area was created that lacks sufficient curves&apos;)&#x0A;    comment(&apos;to successfully call the pocketing function,&apos;)&#x0A;    comment(&apos;wherefore I refuse cowardly to even try&apos;)&#x0A;    comment(&apos;because I think I might crash if I do.&apos;)&#x0A;else:&#x0A;    area_funcs.pocket(a, tool_diameter/2, 0, rapid_safety_space, start_depth, final_depth, 1, step_down, clearance, 1, True, False, 0,False)&#x0A;rapid(z = clearance)&#x0A;comment(&apos;tool change to 45 degreee Chamfering Bit&apos;)&#x0A;tool_change( id=26)&#x0A;spindle(7000)&#x0A;feedrate_hv(593.9696962, 593.9696962)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1)&#x0A;final_depth = float(-1)&#x0A;tool_diameter = float(0.9)&#x0A;cutting_edge_angle = float(45)&#x0A;#absolute() mode&#x0A;comment(&apos;Form valley walls&apos;)&#x0A;rapid(z=5)&#x0A;rapid(x=16.20253513, y=20.88496371)&#x0A;rapid(z=2)&#x0A;feed(z=0)&#x0A;feed(z=-1)&#x0A;feed(x=17.4082034, y=19.00890727, z=-1)&#x0A;feed(x=19.43674877, y=18.08250164, z=-1)&#x0A;feed(x=21.64412243, y=18.39987406, z=-1)&#x0A;feed(x=23.32949883, y=19.86026103, z=-1)&#x0A;feed(x=23.95778288, y=22, z=-1)&#x0A;feed(x=23.32949883, y=24.13973897, z=-1)&#x0A;feed(x=21.64412243, y=25.60012594, z=-1)&#x0A;feed(x=19.43674877, y=25.91749836, z=-1)&#x0A;feed(x=17.4082034, y=24.99109273, z=-1)&#x0A;feed(x=16.20253513, y=23.11503629, z=-1)&#x0A;feed(x=16.20253513, y=20.88496371, z=-1)&#x0A;rapid(z=5)&#x0A;rapid(x=11.90145693, y=19.09994721)&#x0A;rapid(z=2)&#x0A;feed(z=0)&#x0A;feed(z=-1)&#x0A;feed(x=13.41081322, y=16.88612814, z=-1)&#x0A;feed(x=15.50564767, y=15.21555341, z=-1)&#x0A;feed(x=17.99982504, y=14.23666093, z=-1)&#x0A;feed(x=20.67172674, y=14.03642957, z=-1)&#x0A;feed(x=23.28394257, y=14.63265079, z=-1)&#x0A;feed(x=25.60436569, y=15.9723477, z=-1)&#x0A;feed(x=27.42681633, y=17.93648236, z=-1)&#x0A;feed(x=28.58936174, y=20.35053279, z=-1)&#x0A;feed(x=28.98870467, y=23, z=-1)&#x0A;feed(x=28.58936174, y=25.64946721, z=-1)&#x0A;feed(x=27.42681633, y=28.06351764, z=-1)&#x0A;feed(x=25.60436569, y=30.0276523, z=-1)&#x0A;feed(x=23.28394257, y=31.36734921, z=-1)&#x0A;feed(x=20.67172674, y=31.96357043, z=-1)&#x0A;feed(x=17.99982504, y=31.76333907, z=-1)&#x0A;feed(x=15.50564767, y=30.78444659, z=-1)&#x0A;feed(x=13.41081322, y=29.11387186, z=-1)&#x0A;feed(x=11.90145693, y=26.90005279, z=-1)&#x0A;feed(x=11.11169174, y=24.33969691, z=-1)&#x0A;feed(x=11.11169174, y=21.66030309, z=-1)&#x0A;feed(x=11.90145693, y=19.09994721, z=-1)&#x0A;rapid(z=5)&#x0A;rapid(x=5.343975948, y=12.91326595)&#x0A;rapid(z=2)&#x0A;feed(z=0)&#x0A;feed(z=-1)&#x0A;feed(x=7.36076964, y=10.81768577, z=-1)&#x0A;feed(x=9.673816179, y=9.054527016, z=-1)&#x0A;feed(x=12.22889972, y=7.665116633, z=-1)&#x0A;feed(x=14.96613125, y=6.682021224, z=-1)&#x0A;feed(x=17.82135241, y=6.128283712, z=-1)&#x0A;feed(x=20.72763922, y=6.016883234, z=-1)&#x0A;feed(x=23.61687078, y=6.350430924, z=-1)&#x0A;feed(x=26.42132596, y=7.121108707, z=-1)&#x0A;feed(x=29.0752707, y=8.310852548, z=-1)&#x0A;feed(x=31.51649879, y=9.891775861, z=-1)&#x0A;feed(x=33.6877899, y=11.82682314, z=-1)&#x0A;feed(x=35.53825082, y=14.07063852, z=-1)&#x0A;feed(x=37.02450832, y=16.57062887, z=-1)&#x0A;feed(x=38.11172576, y=19.26819654, z=-1)&#x0A;feed(x=38.77441971, y=22.10011282, z=-1)&#x0A;feed(x=38.99705717, y=25, z=-1)&#x0A;feed(x=38.77441971, y=27.89988718, z=-1)&#x0A;feed(x=38.11172576, y=30.73180346, z=-1)&#x0A;feed(x=37.02450832, y=33.42937113, z=-1)&#x0A;feed(x=35.53825082, y=35.92936148, z=-1)&#x0A;feed(x=33.6877899, y=38.17317686, z=-1)&#x0A;feed(x=31.51649879, y=40.10822414, z=-1)&#x0A;feed(x=29.0752707, y=41.68914745, z=-1)&#x0A;feed(x=26.42132596, y=42.87889129, z=-1)&#x0A;feed(x=23.61687078, y=43.64956908, z=-1)&#x0A;feed(x=20.72763922, y=43.98311677, z=-1)&#x0A;feed(x=17.82135241, y=43.87171629, z=-1)&#x0A;feed(x=14.96613125, y=43.31797878, z=-1)&#x0A;feed(x=12.22889972, y=42.33488337, z=-1)&#x0A;feed(x=9.673816179, y=40.94547298, z=-1)&#x0A;feed(x=7.36076964, y=39.18231423, z=-1)&#x0A;feed(x=5.343975948, y=37.08673405, z=-1)&#x0A;feed(x=3.670707037, y=34.70785107, z=-1)&#x0A;feed(x=2.380182915, y=32.10142428, z=-1)&#x0A;feed(x=1.50265237, y=29.32854613, z=-1)&#x0A;feed(x=1.058683976, y=26.45421053, z=-1)&#x0A;feed(x=1.058683976, y=23.54578947, z=-1)&#x0A;feed(x=1.50265237, y=20.67145387, z=-1)&#x0A;feed(x=2.380182915, y=17.89857572, z=-1)&#x0A;feed(x=3.670707037, y=15.29214893, z=-1)&#x0A;feed(x=5.343975948, y=12.91326595, z=-1)&#x0A;rapid(z=5)&#x0A;rapid(x=11.43367296, y=12.93321782)&#x0A;rapid(z=2)&#x0A;feed(z=0)&#x0A;feed(z=-1)&#x0A;feed(x=13.83675305, y=11.43536655, z=-1)&#x0A;feed(x=16.4921572, y=10.45191284, z=-1)&#x0A;feed(x=19.29117284, y=10.02311942, z=-1)&#x0A;feed(x=22.11920795, y=10.16654113, z=-1)&#x0A;feed(x=24.86048244, y=10.87630627, z=-1)&#x0A;feed(x=27.40276821, y=12.12335697, z=-1)&#x0A;feed(x=29.64198377, y=13.85663883, z=-1)&#x0A;feed(x=31.48645539, y=16.0051911, z=-1)&#x0A;feed(x=32.86067017, y=18.48105178, z=-1)&#x0A;feed(x=33.70836761, y=21.18285884, z=-1)&#x0A;feed(x=33.99484286, y=24, z=-1)&#x0A;feed(x=33.70836761, y=26.81714116, z=-1)&#x0A;feed(x=32.86067017, y=29.51894822, z=-1)&#x0A;feed(x=31.48645539, y=31.9948089, z=-1)&#x0A;feed(x=29.64198377, y=34.14336117, z=-1)&#x0A;feed(x=27.40276821, y=35.87664303, z=-1)&#x0A;feed(x=24.86048244, y=37.12369373, z=-1)&#x0A;feed(x=22.11920795, y=37.83345887, z=-1)&#x0A;feed(x=19.29117284, y=37.97688058, z=-1)&#x0A;feed(x=16.4921572, y=37.54808716, z=-1)&#x0A;feed(x=13.83675305, y=36.56463345, z=-1)&#x0A;feed(x=11.43367296, y=35.06678218, z=-1)&#x0A;feed(x=9.381299302, y=33.11585554, z=-1)&#x0A;feed(x=7.763656499, y=30.79172471, z=-1)&#x0A;feed(x=6.646971036, y=28.18953987, z=-1)&#x0A;feed(x=6.076960149, y=25.41583477, z=-1)&#x0A;feed(x=6.076960149, y=22.58416523, z=-1)&#x0A;feed(x=6.646971036, y=19.81046013, z=-1)&#x0A;feed(x=7.763656499, y=17.20827529, z=-1)&#x0A;feed(x=9.381299302, y=14.88414446, z=-1)&#x0A;feed(x=11.43367296, y=12.93321782, z=-1)&#x0A;comment(&apos;Form mountain walls&apos;)&#x0A;workplane(2)&#x0A;comment(&apos;Form valley pockets&apos;)&#x0A;workplane(1)&#x0A;comment(&apos;tool change to 3 mm Carbide Slot Cutter&apos;)&#x0A;tool_change( id=1)&#x0A;spindle(7000)&#x0A;feedrate_hv(593.9696962, 593.9696962)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1)&#x0A;final_depth = float(-1)&#x0A;tool_diameter = float(3)&#x0A;cutting_edge_angle = float(0)&#x0A;#absolute() mode&#x0A;a = area.Area()&#x0A;entry_moves = []&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(21.64412243, 18.39987406), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.32949883, 19.86026103), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.95778288, 22), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.32949883, 24.13973897), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(21.64412243, 25.60012594), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.43674877, 25.91749836), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.4082034, 24.99109273), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.20253513, 23.11503629), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.20253513, 20.88496371), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.4082034, 19.00890727), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.43674877, 18.08250164), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(21.64412243, 18.39987406), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;a.Reorder()&#x0A;entry_style = 0&#x0A;if a.num_curves() &lt; 1:&#x0A;    comment(&apos;In the python code that generated this gcode,&apos;)&#x0A;    comment(&apos;an area was created that lacks sufficient curves&apos;)&#x0A;    comment(&apos;to successfully call the pocketing function,&apos;)&#x0A;    comment(&apos;wherefore I refuse cowardly to even try&apos;)&#x0A;    comment(&apos;because I think I might crash if I do.&apos;)&#x0A;else:&#x0A;    area_funcs.pocket(a, tool_diameter/2, 0, rapid_safety_space, start_depth, final_depth, 0.9, step_down, clearance, 1, True, False, 0,False)&#x0A;rapid(z = clearance)&#x0A;spindle(7000)&#x0A;feedrate_hv(593.9696962, 593.9696962)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1)&#x0A;final_depth = float(-1)&#x0A;tool_diameter = float(3)&#x0A;cutting_edge_angle = float(0)&#x0A;#absolute() mode&#x0A;a = area.Area()&#x0A;entry_moves = []&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(27.42681633, 17.93648236), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(28.58936174, 20.35053279), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(28.98870467, 23), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(28.58936174, 25.64946721), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(27.42681633, 28.06351764), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(25.60436569, 30.0276523), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.28394257, 31.36734921), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.67172674, 31.96357043), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.99982504, 31.76333907), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(15.50564767, 30.78444659), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(13.41081322, 29.11387186), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.90145693, 26.90005279), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.11169174, 24.33969691), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.11169174, 21.66030309), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.90145693, 19.09994721), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(13.41081322, 16.88612814), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(15.50564767, 15.21555341), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.99982504, 14.23666093), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.67172674, 14.03642957), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.28394257, 14.63265079), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(25.60436569, 15.9723477), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(27.42681633, 17.93648236), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;a.Reorder()&#x0A;entry_style = 0&#x0A;if a.num_curves() &lt; 1:&#x0A;    comment(&apos;In the python code that generated this gcode,&apos;)&#x0A;    comment(&apos;an area was created that lacks sufficient curves&apos;)&#x0A;    comment(&apos;to successfully call the pocketing function,&apos;)&#x0A;    comment(&apos;wherefore I refuse cowardly to even try&apos;)&#x0A;    comment(&apos;because I think I might crash if I do.&apos;)&#x0A;else:&#x0A;    area_funcs.pocket(a, tool_diameter/2, 0, rapid_safety_space, start_depth, final_depth, 0.9, step_down, clearance, 1, True, False, 0,False)&#x0A;rapid(z = clearance)&#x0A;spindle(7000)&#x0A;feedrate_hv(593.9696962, 593.9696962)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1)&#x0A;final_depth = float(-1)&#x0A;tool_diameter = float(3)&#x0A;cutting_edge_angle = float(0)&#x0A;#absolute() mode&#x0A;a = area.Area()&#x0A;entry_moves = []&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(38.11172576, 19.26819654), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(38.77441971, 22.10011282), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(38.99705717, 25), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(38.77441971, 27.89988718), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(38.11172576, 30.73180346), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(37.02450832, 33.42937113), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(35.53825082, 35.92936148), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.6877899, 38.17317686), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(31.51649879, 40.10822414), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.0752707, 41.68914745), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(26.42132596, 42.87889129), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.61687078, 43.64956908), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.72763922, 43.98311677), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.82135241, 43.87171629), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(14.96613125, 43.31797878), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(12.22889972, 42.33488337), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(9.673816179, 40.94547298), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(7.36076964, 39.18231423), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(5.343975948, 37.08673405), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(3.670707037, 34.70785107), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(2.380182915, 32.10142428), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(1.50265237, 29.32854613), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(1.058683976, 26.45421053), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(1.058683976, 23.54578947), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(1.50265237, 20.67145387), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(2.380182915, 17.89857572), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(3.670707037, 15.29214893), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(5.343975948, 12.91326595), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(7.36076964, 10.81768577), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(9.673816179, 9.054527016), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(12.22889972, 7.665116633), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(14.96613125, 6.682021224), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.82135241, 6.128283712), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.72763922, 6.016883234), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.61687078, 6.350430924), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(26.42132596, 7.121108707), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.0752707, 8.310852548), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(31.51649879, 9.891775861), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.6877899, 11.82682314), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(35.53825082, 14.07063852), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(37.02450832, 16.57062887), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(38.11172576, 19.26819654), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;a.Reorder()&#x0A;entry_style = 0&#x0A;if a.num_curves() &lt; 1:&#x0A;    comment(&apos;In the python code that generated this gcode,&apos;)&#x0A;    comment(&apos;an area was created that lacks sufficient curves&apos;)&#x0A;    comment(&apos;to successfully call the pocketing function,&apos;)&#x0A;    comment(&apos;wherefore I refuse cowardly to even try&apos;)&#x0A;    comment(&apos;because I think I might crash if I do.&apos;)&#x0A;else:&#x0A;    area_funcs.pocket(a, tool_diameter/2, 0, rapid_safety_space, start_depth, final_depth, 0.9, step_down, clearance, 1, True, False, 0,False)&#x0A;rapid(z = clearance)&#x0A;spindle(7000)&#x0A;feedrate_hv(593.9696962, 593.9696962)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1)&#x0A;final_depth = float(-1)&#x0A;tool_diameter = float(3)&#x0A;cutting_edge_angle = float(0)&#x0A;#absolute() mode&#x0A;a = area.Area()&#x0A;entry_moves = []&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(32.86067017, 18.48105178), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.70836761, 21.18285884), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.99484286, 24), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.70836761, 26.81714116), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(32.86067017, 29.51894822), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(31.48645539, 31.9948089), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.64198377, 34.14336117), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(27.40276821, 35.87664303), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(24.86048244, 37.12369373), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(22.11920795, 37.83345887), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.29117284, 37.97688058), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.4921572, 37.54808716), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(13.83675305, 36.56463345), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.43367296, 35.06678218), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(9.381299302, 33.11585554), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(7.763656499, 30.79172471), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.646971036, 28.18953987), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.076960149, 25.41583477), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.076960149, 22.58416523), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.646971036, 19.81046013), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(7.763656499, 17.20827529), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(9.381299302, 14.88414446), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.43367296, 12.93321782), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(13.83675305, 11.43536655), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.4921572, 10.45191284), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.29117284, 10.02311942), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(22.11920795, 10.16654113), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(24.86048244, 10.87630627), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(27.40276821, 12.12335697), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.64198377, 13.85663883), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(31.48645539, 16.0051911), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(32.86067017, 18.48105178), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;a.Reorder()&#x0A;entry_style = 0&#x0A;if a.num_curves() &lt; 1:&#x0A;    comment(&apos;In the python code that generated this gcode,&apos;)&#x0A;    comment(&apos;an area was created that lacks sufficient curves&apos;)&#x0A;    comment(&apos;to successfully call the pocketing function,&apos;)&#x0A;    comment(&apos;wherefore I refuse cowardly to even try&apos;)&#x0A;    comment(&apos;because I think I might crash if I do.&apos;)&#x0A;else:&#x0A;    area_funcs.pocket(a, tool_diameter/2, 0, rapid_safety_space, start_depth, final_depth, 0.9, step_down, clearance, 1, True, False, 0,False)&#x0A;rapid(z = clearance)&#x0A;comment(&apos;Form mountain pockets above short mountains&apos;)&#x0A;workplane(2)&#x0A;comment(&apos;Form mountains&apos;)&#x0A;spindle(7000)&#x0A;feedrate_hv(593.9696962, 593.9696962)&#x0A;flush_nc()&#x0A;clearance = float(5)&#x0A;rapid_safety_space = float(2)&#x0A;start_depth = float(0)&#x0A;step_down = float(1)&#x0A;final_depth = float(-1)&#x0A;tool_diameter = float(3)&#x0A;cutting_edge_angle = float(0)&#x0A;#absolute() mode&#x0A;a = area.Area()&#x0A;entry_moves = []&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(-3.941316024, -48.98532362), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(-3.941316024, -1.014676379), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(44, -1.014676379), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(44, -48.98532362), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(-3.941316024, -48.98532362), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(24.20626766, -19.29679591), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(22.07707506, -17.45184002), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.28842581, -17.05089279), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.72569633, -18.22125213), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(15.20253513, -20.59133722), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(15.20253513, -23.40866278), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.72569633, -25.77874787), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.28842581, -26.94910721), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(22.07707506, -26.54815998), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(24.20626766, -24.70320409), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(25, -22), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(24.20626766, -19.29679591), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(29.55572806, -20.05244826), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(28.26238774, -17.36679942), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(26.23489802, -15.18168518), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.65341024, -13.69126251), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.74730094, -13.02796203), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.77479066, -13.25072088), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(15, -14.33974596), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(12.66948128, -16.19827262), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(10.99031132, -18.66116261), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(10.11169174, -21.50957734), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(10.11169174, -24.49042266), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(10.99031132, -27.33883739), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(12.66948128, -29.80172738), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(15, -31.66025404), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.77479066, -32.74927912), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.74730094, -32.97203797), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.65341024, -32.30873749), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(26.23489802, -30.81831483), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(28.26238774, -28.63320058), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.55572806, -25.94755174), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(30, -23), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.55572806, -20.05244826), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(39.76560848, -21.94701432), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(39.06792784, -18.96558803), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(37.92331114, -16.12560324), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(36.35858722, -13.4936268), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(34.41043187, -11.13134998), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(32.12450822, -9.094142575), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.55439637, -7.429754982), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(26.76033757, -6.17719904), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.80782218, -5.3658336), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.76605467, -5.014676379), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.70633149, -5.131958205), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(14.70036996, -5.714930091), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.81862726, -6.74992767), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(9.128649, -8.212691477), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.693485997, -10.06893557), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(4.570216404, -12.27515115), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(2.80860786, -14.77962641), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(1.449950978, -17.52365856), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(0.526091522, -20.44292982), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(0.0586839763, -23.46901494), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(0.0586839763, -26.53098506), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(0.526091522, -29.55707018), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(1.449950978, -32.47634144), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(2.80860786, -35.22037359), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(4.570216404, -37.72484885), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.693485997, -39.93106443), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(9.128649, -41.78730852), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(11.81862726, -43.25007233), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(14.70036996, -44.28506991), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(17.70633149, -44.8680418), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(20.76605467, -44.98532362), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(23.80782218, -44.6341664), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(26.76033757, -43.82280096), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(29.55439637, -42.57024502), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(32.12450822, -40.90585743), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(34.41043187, -38.86865002), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(36.35858722, -36.5063732), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(37.92331114, -33.87439676), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(39.06792784, -31.03441197), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(39.76560848, -28.05298568), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(40, -25), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(39.76560848, -21.94701432), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;c = area.Curve()&#x0A;c.append(area.Vertex(0, area.Point(34.69294912, -20.9805222), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.78436717, -18.08466217), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(32.31145162, -15.43097677), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(30.33450379, -13.12810819), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(27.93446016, -11.27033614), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(25.20957879, -9.933718018), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(22.27141666, -9.172975135), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.24026247, -9.019252392), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.24021202, -9.478843217), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(13.39408773, -10.53293191), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(10.81841026, -12.13836395), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(8.61862816, -14.22941276), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.884800758, -16.72047056), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(5.687911154, -19.50955315), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(5.076960149, -22.48247517), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(5.076960149, -25.51752483), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(5.687911154, -28.49044685), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(6.884800758, -31.27952944), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(8.61862816, -33.77058724), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(10.81841026, -35.86163605), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(13.39408773, -37.46706809), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(16.24021202, -38.52115678), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(19.24026247, -38.98074761), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(22.27141666, -38.82702486), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(25.20957879, -38.06628198), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(27.93446016, -36.72966386), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(30.33450379, -34.87189181), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(32.31145162, -32.56902323), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(33.78436717, -29.91533783), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(34.69294912, -27.0194778), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(35, -24), area.Point(0, 0)))&#x0A;c.append(area.Vertex(0, area.Point(34.69294912, -20.9805222), area.Point(0, 0)))&#x0A;a.append(c)&#x0A;&#x0A;a.Reorder()&#x0A;entry_style = 0&#x0A;if a.num_curves() &lt; 1:&#x0A;    comment(&apos;In the python code that generated this gcode,&apos;)&#x0A;    comment(&apos;an area was created that lacks sufficient curves&apos;)&#x0A;    comment(&apos;to successfully call the pocketing function,&apos;)&#x0A;    comment(&apos;wherefore I refuse cowardly to even try&apos;)&#x0A;    comment(&apos;because I think I might crash if I do.&apos;)&#x0A;else:&#x0A;    area_funcs.pocket(a, tool_diameter/2, 0, rapid_safety_space, start_depth, final_depth, 0.9, step_down, clearance, 1, True, False, 0,False)&#x0A;rapid(z = clearance)&#x0A;program_end()&#x0A;" units="1" ProgramPathControlMode="3" ProgramMotionBlendingTolerance="0.0001" ProgramNaiveCamTolerance="0.0001" brinell_hardness="0" raw_material_name="Please select a material to machine" max_spindle_speed="0" safety_height_defined="0" safety_height="0" clearance_height="50" id="1">
+        <Tools>
+            <Tool title="3 mm Carbide Slot Cutter" tool_number="1" id="1">
+                <params diameter="3" x_offset="0" tool_length_offset="15" max_advance_per_revolution="0.12" automatically_generate_title="1" material="1" orientation="6" type="3" corner_radius="0" flat_radius="1.5" cutting_edge_angle="0" cutting_edge_height="9" front_angle="95" tool_angle="60" back_angle="25" probe_offset_x="0" probe_offset_y="0" width_over_thickness="1.8" feedrate="50" extrusion_material="0" layer_height="0.35" temperature="220" filament_diameter="3" flowrate="255" gradient="-0.1" pitch="1" direction="0" />
+            </Tool>
+            <Tool title="6 mm Carbide Slot Cutter" tool_number="2" id="2">
+                <params diameter="6" x_offset="0" tool_length_offset="63.5" max_advance_per_revolution="0.12" automatically_generate_title="1" material="1" orientation="6" type="3" corner_radius="0" flat_radius="6.35" cutting_edge_angle="0" cutting_edge_height="38.1" front_angle="95" tool_angle="60" back_angle="25" probe_offset_x="0" probe_offset_y="0" width_over_thickness="1.8" feedrate="50" extrusion_material="0" layer_height="0.35" temperature="220" filament_diameter="3" flowrate="255" gradient="-0.1" pitch="1" direction="0" />
+            </Tool>
+            <Tool title="6 mm Carbide Ball End Mill" tool_number="3" id="3">
+                <params diameter="6" x_offset="0" tool_length_offset="63.5" max_advance_per_revolution="0.12" automatically_generate_title="1" material="1" orientation="6" type="4" corner_radius="6.35" flat_radius="0" cutting_edge_angle="0" cutting_edge_height="38.1" front_angle="95" tool_angle="60" back_angle="25" probe_offset_x="0" probe_offset_y="0" width_over_thickness="1.8" feedrate="50" extrusion_material="0" layer_height="0.35" temperature="220" filament_diameter="3" flowrate="255" gradient="-0.1" pitch="1" direction="0" />
+            </Tool>
+            <Tool title="21 degreee Engraving Bit" tool_number="4" id="4">
+                <params diameter="3" x_offset="0" tool_length_offset="63.5" max_advance_per_revolution="0.12" automatically_generate_title="1" material="1" orientation="6" type="11" corner_radius="0" flat_radius="0.125" cutting_edge_angle="21" cutting_edge_height="7.48963106" front_angle="95" tool_angle="60" back_angle="25" probe_offset_x="0" probe_offset_y="0" width_over_thickness="1.8" feedrate="50" extrusion_material="0" layer_height="0.35" temperature="220" filament_diameter="3" flowrate="255" gradient="0" pitch="1" direction="0" />
+            </Tool>
+            <Tool title="15.98 mm Carbide Slot Cutter" tool_number="5" id="5">
+                <params diameter="15.98" x_offset="0" tool_length_offset="63.5" max_advance_per_revolution="0.12" automatically_generate_title="1" material="1" orientation="6" type="3" corner_radius="0" flat_radius="6.35" cutting_edge_angle="0" cutting_edge_height="38.1" front_angle="95" tool_angle="60" back_angle="25" probe_offset_x="0" probe_offset_y="0" width_over_thickness="1.8" feedrate="50" extrusion_material="0" layer_height="0.35" temperature="220" filament_diameter="3" flowrate="255" gradient="-0.1" pitch="1" direction="0" />
+            </Tool>
+            <Tool title="45 degreee Chamfering Bit" tool_number="26" id="26">
+                <params diameter="3" x_offset="0" tool_length_offset="63.5" max_advance_per_revolution="0.12" automatically_generate_title="1" material="1" orientation="6" type="5" corner_radius="0" flat_radius="0" cutting_edge_angle="45" cutting_edge_height="1.5" front_angle="95" tool_angle="60" back_angle="25" probe_offset_x="0" probe_offset_y="0" width_over_thickness="1.8" feedrate="50" extrusion_material="0" layer_height="0.35" temperature="220" filament_diameter="3" flowrate="255" gradient="0" pitch="1" direction="0" />
+            </Tool>
+        </Tools>
+        <Fixtures />
+        <Operations>
+            <Inlay active="1" title="Inlay" tool_number="26" id="1">
+                <params border="0" clearance_tool="1" pass="2" mirror_axis="0" female_before_male_fixtures="1" min_cornering_angle="135" />
+                <depthop clear="5" down="1" startdepth="0" depth="-1" r="2" abs_mode="0" />
+                <speedop hfeed="593.969696197" vfeed="593.969696197" spin="7000" />
+                <Sketch title="Sketch" id="5">
+                    <Line col="0" id="220">
+                        <Point col="0" x="24.206267664" y="19.296795913" z="0" id="2936" />
+                        <Point col="0" x="22.077075065" y="17.451840023" z="0" id="2935" />
+                    </Line>
+                    <Line col="0" id="221">
+                        <Point col="0" x="22.077075065" y="17.451840023" z="0" id="2932" />
+                        <Point col="0" x="19.288425809" y="17.050892791" z="0" id="2931" />
+                    </Line>
+                    <Line col="0" id="222">
+                        <Point col="0" x="19.288425809" y="17.050892791" z="0" id="2928" />
+                        <Point col="0" x="16.72569633" y="18.221252128" z="0" id="2927" />
+                    </Line>
+                    <Line col="0" id="223">
+                        <Point col="0" x="16.72569633" y="18.221252128" z="0" id="2924" />
+                        <Point col="0" x="15.202535132" y="20.591337216" z="0" id="2923" />
+                    </Line>
+                    <Line col="0" id="224">
+                        <Point col="0" x="15.202535132" y="20.591337216" z="0" id="2920" />
+                        <Point col="0" x="15.202535132" y="23.408662784" z="0" id="2919" />
+                    </Line>
+                    <Line col="0" id="225">
+                        <Point col="0" x="15.202535132" y="23.408662784" z="0" id="2916" />
+                        <Point col="0" x="16.72569633" y="25.778747872" z="0" id="2915" />
+                    </Line>
+                    <Line col="0" id="226">
+                        <Point col="0" x="16.72569633" y="25.778747872" z="0" id="2912" />
+                        <Point col="0" x="19.288425809" y="26.949107209" z="0" id="2911" />
+                    </Line>
+                    <Line col="0" id="227">
+                        <Point col="0" x="19.288425809" y="26.949107209" z="0" id="2908" />
+                        <Point col="0" x="22.077075065" y="26.548159977" z="0" id="2907" />
+                    </Line>
+                    <Line col="0" id="228">
+                        <Point col="0" x="22.077075065" y="26.548159977" z="0" id="2904" />
+                        <Point col="0" x="24.206267664" y="24.703204087" z="0" id="2903" />
+                    </Line>
+                    <Line col="0" id="229">
+                        <Point col="0" x="24.206267664" y="24.703204087" z="0" id="2900" />
+                        <Point col="0" x="25" y="22" z="0" id="2899" />
+                    </Line>
+                    <Line col="0" id="230">
+                        <Point col="0" x="25" y="22" z="0" id="2896" />
+                        <Point col="0" x="24.206267664" y="19.296795913" z="0" id="2895" />
+                    </Line>
+                </Sketch>
+                <Sketch title="Sketch" id="6">
+                    <Line col="0" id="116">
+                        <Point col="0" x="29.555728058" y="20.052448256" z="0" id="1227" />
+                        <Point col="0" x="28.262387743" y="17.366799419" z="0" id="1228" />
+                    </Line>
+                    <Line col="0" id="117">
+                        <Point col="0" x="28.262387743" y="17.366799419" z="0" id="1223" />
+                        <Point col="0" x="26.234898019" y="15.181685175" z="0" id="1224" />
+                    </Line>
+                    <Line col="0" id="118">
+                        <Point col="0" x="26.234898019" y="15.181685175" z="0" id="1219" />
+                        <Point col="0" x="23.653410244" y="13.691262514" z="0" id="1220" />
+                    </Line>
+                    <Line col="0" id="119">
+                        <Point col="0" x="23.653410244" y="13.691262514" z="0" id="1215" />
+                        <Point col="0" x="20.747300936" y="13.027962028" z="0" id="1216" />
+                    </Line>
+                    <Line col="0" id="120">
+                        <Point col="0" x="20.747300936" y="13.027962028" z="0" id="1211" />
+                        <Point col="0" x="17.77479066" y="13.250720878" z="0" id="1212" />
+                    </Line>
+                    <Line col="0" id="121">
+                        <Point col="0" x="17.77479066" y="13.250720878" z="0" id="1207" />
+                        <Point col="0" x="15" y="14.339745962" z="0" id="1208" />
+                    </Line>
+                    <Line col="0" id="122">
+                        <Point col="0" x="15" y="14.339745962" z="0" id="1203" />
+                        <Point col="0" x="12.669481282" y="16.198272622" z="0" id="1204" />
+                    </Line>
+                    <Line col="0" id="123">
+                        <Point col="0" x="12.669481282" y="16.198272622" z="0" id="1199" />
+                        <Point col="0" x="10.990311321" y="18.661162609" z="0" id="1200" />
+                    </Line>
+                    <Line col="0" id="124">
+                        <Point col="0" x="10.990311321" y="18.661162609" z="0" id="1195" />
+                        <Point col="0" x="10.111691738" y="21.509577338" z="0" id="1196" />
+                    </Line>
+                    <Line col="0" id="125">
+                        <Point col="0" x="10.111691738" y="21.509577338" z="0" id="1191" />
+                        <Point col="0" x="10.111691738" y="24.490422662" z="0" id="1192" />
+                    </Line>
+                    <Line col="0" id="126">
+                        <Point col="0" x="10.111691738" y="24.490422662" z="0" id="1187" />
+                        <Point col="0" x="10.990311321" y="27.338837391" z="0" id="1188" />
+                    </Line>
+                    <Line col="0" id="127">
+                        <Point col="0" x="10.990311321" y="27.338837391" z="0" id="1183" />
+                        <Point col="0" x="12.669481282" y="29.801727378" z="0" id="1184" />
+                    </Line>
+                    <Line col="0" id="128">
+                        <Point col="0" x="12.669481282" y="29.801727378" z="0" id="1179" />
+                        <Point col="0" x="15" y="31.660254038" z="0" id="1180" />
+                    </Line>
+                    <Line col="0" id="129">
+                        <Point col="0" x="15" y="31.660254038" z="0" id="1175" />
+                        <Point col="0" x="17.77479066" y="32.749279122" z="0" id="1176" />
+                    </Line>
+                    <Line col="0" id="130">
+                        <Point col="0" x="17.77479066" y="32.749279122" z="0" id="1171" />
+                        <Point col="0" x="20.747300936" y="32.972037972" z="0" id="1172" />
+                    </Line>
+                    <Line col="0" id="131">
+                        <Point col="0" x="20.747300936" y="32.972037972" z="0" id="1167" />
+                        <Point col="0" x="23.653410244" y="32.308737486" z="0" id="1168" />
+                    </Line>
+                    <Line col="0" id="132">
+                        <Point col="0" x="23.653410244" y="32.308737486" z="0" id="1163" />
+                        <Point col="0" x="26.234898019" y="30.818314825" z="0" id="1164" />
+                    </Line>
+                    <Line col="0" id="133">
+                        <Point col="0" x="26.234898019" y="30.818314825" z="0" id="1159" />
+                        <Point col="0" x="28.262387743" y="28.633200581" z="0" id="1160" />
+                    </Line>
+                    <Line col="0" id="134">
+                        <Point col="0" x="28.262387743" y="28.633200581" z="0" id="1155" />
+                        <Point col="0" x="29.555728058" y="25.947551744" z="0" id="1156" />
+                    </Line>
+                    <Line col="0" id="135">
+                        <Point col="0" x="29.555728058" y="25.947551744" z="0" id="1151" />
+                        <Point col="0" x="30" y="23" z="0" id="1152" />
+                    </Line>
+                    <Line col="0" id="136">
+                        <Point col="0" x="30" y="23" z="0" id="1231" />
+                        <Point col="0" x="29.555728058" y="20.052448256" z="0" id="1232" />
+                    </Line>
+                </Sketch>
+                <Sketch title="Sketch" id="7">
+                    <Line col="0" id="137">
+                        <Point col="0" x="39.765608476" y="21.947014316" z="0" id="1681" />
+                        <Point col="0" x="39.067927841" y="18.965588028" z="0" id="1682" />
+                    </Line>
+                    <Line col="0" id="138">
+                        <Point col="0" x="39.067927841" y="18.965588028" z="0" id="1677" />
+                        <Point col="0" x="37.923311139" y="16.125603243" z="0" id="1678" />
+                    </Line>
+                    <Line col="0" id="139">
+                        <Point col="0" x="37.923311139" y="16.125603243" z="0" id="1673" />
+                        <Point col="0" x="36.358587215" y="13.493626796" z="0" id="1674" />
+                    </Line>
+                    <Line col="0" id="140">
+                        <Point col="0" x="36.358587215" y="13.493626796" z="0" id="1669" />
+                        <Point col="0" x="34.410431872" y="11.131349984" z="0" id="1670" />
+                    </Line>
+                    <Line col="0" id="141">
+                        <Point col="0" x="34.410431872" y="11.131349984" z="0" id="1665" />
+                        <Point col="0" x="32.124508219" y="9.094142575" z="0" id="1666" />
+                    </Line>
+                    <Line col="0" id="142">
+                        <Point col="0" x="32.124508219" y="9.094142575" z="0" id="1661" />
+                        <Point col="0" x="29.55439637" y="7.429754982" z="0" id="1662" />
+                    </Line>
+                    <Line col="0" id="143">
+                        <Point col="0" x="29.55439637" y="7.429754982" z="0" id="1657" />
+                        <Point col="0" x="26.760337568" y="6.17719904" z="0" id="1658" />
+                    </Line>
+                    <Line col="0" id="144">
+                        <Point col="0" x="26.760337568" y="6.17719904" z="0" id="1653" />
+                        <Point col="0" x="23.807822183" y="5.3658336" z="0" id="1654" />
+                    </Line>
+                    <Line col="0" id="145">
+                        <Point col="0" x="23.807822183" y="5.3658336" z="0" id="1649" />
+                        <Point col="0" x="20.766054674" y="5.014676379" z="0" id="1650" />
+                    </Line>
+                    <Line col="0" id="146">
+                        <Point col="0" x="20.766054674" y="5.014676379" z="0" id="1645" />
+                        <Point col="0" x="17.706331492" y="5.131958205" z="0" id="1646" />
+                    </Line>
+                    <Line col="0" id="147">
+                        <Point col="0" x="17.706331492" y="5.131958205" z="0" id="1641" />
+                        <Point col="0" x="14.700369956" y="5.714930091" z="0" id="1642" />
+                    </Line>
+                    <Line col="0" id="148">
+                        <Point col="0" x="14.700369956" y="5.714930091" z="0" id="1637" />
+                        <Point col="0" x="11.818627257" y="6.74992767" z="0" id="1638" />
+                    </Line>
+                    <Line col="0" id="149">
+                        <Point col="0" x="11.818627257" y="6.74992767" z="0" id="1633" />
+                        <Point col="0" x="9.128649" y="8.212691477" z="0" id="1634" />
+                    </Line>
+                    <Line col="0" id="150">
+                        <Point col="0" x="9.128649" y="8.212691477" z="0" id="1629" />
+                        <Point col="0" x="6.693485997" y="10.068935568" z="0" id="1630" />
+                    </Line>
+                    <Line col="0" id="151">
+                        <Point col="0" x="6.693485997" y="10.068935568" z="0" id="1625" />
+                        <Point col="0" x="4.570216404" y="12.275151153" z="0" id="1626" />
+                    </Line>
+                    <Line col="0" id="152">
+                        <Point col="0" x="4.570216404" y="12.275151153" z="0" id="1621" />
+                        <Point col="0" x="2.80860786" y="14.779626411" z="0" id="1622" />
+                    </Line>
+                    <Line col="0" id="153">
+                        <Point col="0" x="2.80860786" y="14.779626411" z="0" id="1617" />
+                        <Point col="0" x="1.449950978" y="17.523658563" z="0" id="1618" />
+                    </Line>
+                    <Line col="0" id="154">
+                        <Point col="0" x="1.449950978" y="17.523658563" z="0" id="1613" />
+                        <Point col="0" x="0.526091522" y="20.442929822" z="0" id="1614" />
+                    </Line>
+                    <Line col="0" id="155">
+                        <Point col="0" x="0.526091522" y="20.442929822" z="0" id="1609" />
+                        <Point col="0" x="0.0586839763" y="23.469014943" z="0" id="1610" />
+                    </Line>
+                    <Line col="0" id="156">
+                        <Point col="0" x="0.0586839763" y="23.469014943" z="0" id="1605" />
+                        <Point col="0" x="0.0586839763" y="26.530985057" z="0" id="1606" />
+                    </Line>
+                    <Line col="0" id="157">
+                        <Point col="0" x="0.0586839763" y="26.530985057" z="0" id="1601" />
+                        <Point col="0" x="0.526091522" y="29.557070178" z="0" id="1602" />
+                    </Line>
+                    <Line col="0" id="158">
+                        <Point col="0" x="0.526091522" y="29.557070178" z="0" id="1597" />
+                        <Point col="0" x="1.449950978" y="32.476341437" z="0" id="1598" />
+                    </Line>
+                    <Line col="0" id="159">
+                        <Point col="0" x="1.449950978" y="32.476341437" z="0" id="1593" />
+                        <Point col="0" x="2.80860786" y="35.220373589" z="0" id="1594" />
+                    </Line>
+                    <Line col="0" id="160">
+                        <Point col="0" x="2.80860786" y="35.220373589" z="0" id="1589" />
+                        <Point col="0" x="4.570216404" y="37.724848847" z="0" id="1590" />
+                    </Line>
+                    <Line col="0" id="161">
+                        <Point col="0" x="4.570216404" y="37.724848847" z="0" id="1585" />
+                        <Point col="0" x="6.693485997" y="39.931064432" z="0" id="1586" />
+                    </Line>
+                    <Line col="0" id="162">
+                        <Point col="0" x="6.693485997" y="39.931064432" z="0" id="1581" />
+                        <Point col="0" x="9.128649" y="41.787308523" z="0" id="1582" />
+                    </Line>
+                    <Line col="0" id="163">
+                        <Point col="0" x="9.128649" y="41.787308523" z="0" id="1577" />
+                        <Point col="0" x="11.818627257" y="43.25007233" z="0" id="1578" />
+                    </Line>
+                    <Line col="0" id="164">
+                        <Point col="0" x="11.818627257" y="43.25007233" z="0" id="1573" />
+                        <Point col="0" x="14.700369956" y="44.285069909" z="0" id="1574" />
+                    </Line>
+                    <Line col="0" id="165">
+                        <Point col="0" x="14.700369956" y="44.285069909" z="0" id="1569" />
+                        <Point col="0" x="17.706331492" y="44.868041795" z="0" id="1570" />
+                    </Line>
+                    <Line col="0" id="166">
+                        <Point col="0" x="17.706331492" y="44.868041795" z="0" id="1565" />
+                        <Point col="0" x="20.766054674" y="44.985323621" z="0" id="1566" />
+                    </Line>
+                    <Line col="0" id="167">
+                        <Point col="0" x="20.766054674" y="44.985323621" z="0" id="1561" />
+                        <Point col="0" x="23.807822183" y="44.6341664" z="0" id="1562" />
+                    </Line>
+                    <Line col="0" id="168">
+                        <Point col="0" x="23.807822183" y="44.6341664" z="0" id="1557" />
+                        <Point col="0" x="26.760337568" y="43.82280096" z="0" id="1558" />
+                    </Line>
+                    <Line col="0" id="169">
+                        <Point col="0" x="26.760337568" y="43.82280096" z="0" id="1553" />
+                        <Point col="0" x="29.55439637" y="42.570245018" z="0" id="1554" />
+                    </Line>
+                    <Line col="0" id="170">
+                        <Point col="0" x="29.55439637" y="42.570245018" z="0" id="1549" />
+                        <Point col="0" x="32.124508219" y="40.905857425" z="0" id="1550" />
+                    </Line>
+                    <Line col="0" id="171">
+                        <Point col="0" x="32.124508219" y="40.905857425" z="0" id="1545" />
+                        <Point col="0" x="34.410431872" y="38.868650016" z="0" id="1546" />
+                    </Line>
+                    <Line col="0" id="172">
+                        <Point col="0" x="34.410431872" y="38.868650016" z="0" id="1541" />
+                        <Point col="0" x="36.358587215" y="36.506373204" z="0" id="1542" />
+                    </Line>
+                    <Line col="0" id="173">
+                        <Point col="0" x="36.358587215" y="36.506373204" z="0" id="1537" />
+                        <Point col="0" x="37.923311139" y="33.874396757" z="0" id="1538" />
+                    </Line>
+                    <Line col="0" id="174">
+                        <Point col="0" x="37.923311139" y="33.874396757" z="0" id="1533" />
+                        <Point col="0" x="39.067927841" y="31.034411972" z="0" id="1534" />
+                    </Line>
+                    <Line col="0" id="175">
+                        <Point col="0" x="39.067927841" y="31.034411972" z="0" id="1529" />
+                        <Point col="0" x="39.765608476" y="28.052985684" z="0" id="1530" />
+                    </Line>
+                    <Line col="0" id="176">
+                        <Point col="0" x="39.765608476" y="28.052985684" z="0" id="1525" />
+                        <Point col="0" x="40" y="25" z="0" id="1526" />
+                    </Line>
+                    <Line col="0" id="177">
+                        <Point col="0" x="40" y="25" z="0" id="1685" />
+                        <Point col="0" x="39.765608476" y="21.947014316" z="0" id="1686" />
+                    </Line>
+                </Sketch>
+                <Sketch title="Sketch" id="8">
+                    <Line col="0" id="178">
+                        <Point col="0" x="34.692949119" y="20.980522199" z="0" id="2175" />
+                        <Point col="0" x="33.784367174" y="18.084662173" z="0" id="2176" />
+                    </Line>
+                    <Line col="0" id="179">
+                        <Point col="0" x="33.784367174" y="18.084662173" z="0" id="2171" />
+                        <Point col="0" x="32.311451618" y="15.430976774" z="0" id="2172" />
+                    </Line>
+                    <Line col="0" id="180">
+                        <Point col="0" x="32.311451618" y="15.430976774" z="0" id="2167" />
+                        <Point col="0" x="30.334503786" y="13.128108192" z="0" id="2168" />
+                    </Line>
+                    <Line col="0" id="181">
+                        <Point col="0" x="30.334503786" y="13.128108192" z="0" id="2163" />
+                        <Point col="0" x="27.934460155" y="11.270336138" z="0" id="2164" />
+                    </Line>
+                    <Line col="0" id="182">
+                        <Point col="0" x="27.934460155" y="11.270336138" z="0" id="2159" />
+                        <Point col="0" x="25.209578793" y="9.933718018" z="0" id="2160" />
+                    </Line>
+                    <Line col="0" id="183">
+                        <Point col="0" x="25.209578793" y="9.933718018" z="0" id="2155" />
+                        <Point col="0" x="22.271416663" y="9.172975135" z="0" id="2156" />
+                    </Line>
+                    <Line col="0" id="184">
+                        <Point col="0" x="22.271416663" y="9.172975135" z="0" id="2151" />
+                        <Point col="0" x="19.240262467" y="9.019252392" z="0" id="2152" />
+                    </Line>
+                    <Line col="0" id="185">
+                        <Point col="0" x="19.240262467" y="9.019252392" z="0" id="2147" />
+                        <Point col="0" x="16.240212016" y="9.478843217" z="0" id="2148" />
+                    </Line>
+                    <Line col="0" id="186">
+                        <Point col="0" x="16.240212016" y="9.478843217" z="0" id="2143" />
+                        <Point col="0" x="13.394087727" y="10.532931906" z="0" id="2144" />
+                    </Line>
+                    <Line col="0" id="187">
+                        <Point col="0" x="13.394087727" y="10.532931906" z="0" id="2139" />
+                        <Point col="0" x="10.818410262" y="12.138363946" z="0" id="2140" />
+                    </Line>
+                    <Line col="0" id="188">
+                        <Point col="0" x="10.818410262" y="12.138363946" z="0" id="2135" />
+                        <Point col="0" x="8.61862816" y="14.229412759" z="0" id="2136" />
+                    </Line>
+                    <Line col="0" id="189">
+                        <Point col="0" x="8.61862816" y="14.229412759" z="0" id="2131" />
+                        <Point col="0" x="6.884800758" y="16.720470562" z="0" id="2132" />
+                    </Line>
+                    <Line col="0" id="190">
+                        <Point col="0" x="6.884800758" y="16.720470562" z="0" id="2127" />
+                        <Point col="0" x="5.687911154" y="19.509553155" z="0" id="2128" />
+                    </Line>
+                    <Line col="0" id="191">
+                        <Point col="0" x="5.687911154" y="19.509553155" z="0" id="2123" />
+                        <Point col="0" x="5.076960149" y="22.48247517" z="0" id="2124" />
+                    </Line>
+                    <Line col="0" id="192">
+                        <Point col="0" x="5.076960149" y="22.48247517" z="0" id="2119" />
+                        <Point col="0" x="5.076960149" y="25.51752483" z="0" id="2120" />
+                    </Line>
+                    <Line col="0" id="193">
+                        <Point col="0" x="5.076960149" y="25.51752483" z="0" id="2115" />
+                        <Point col="0" x="5.687911154" y="28.490446845" z="0" id="2116" />
+                    </Line>
+                    <Line col="0" id="194">
+                        <Point col="0" x="5.687911154" y="28.490446845" z="0" id="2111" />
+                        <Point col="0" x="6.884800758" y="31.279529438" z="0" id="2112" />
+                    </Line>
+                    <Line col="0" id="195">
+                        <Point col="0" x="6.884800758" y="31.279529438" z="0" id="2107" />
+                        <Point col="0" x="8.61862816" y="33.770587241" z="0" id="2108" />
+                    </Line>
+                    <Line col="0" id="196">
+                        <Point col="0" x="8.61862816" y="33.770587241" z="0" id="2103" />
+                        <Point col="0" x="10.818410262" y="35.861636054" z="0" id="2104" />
+                    </Line>
+                    <Line col="0" id="197">
+                        <Point col="0" x="10.818410262" y="35.861636054" z="0" id="2099" />
+                        <Point col="0" x="13.394087727" y="37.467068094" z="0" id="2100" />
+                    </Line>
+                    <Line col="0" id="198">
+                        <Point col="0" x="13.394087727" y="37.467068094" z="0" id="2095" />
+                        <Point col="0" x="16.240212016" y="38.521156783" z="0" id="2096" />
+                    </Line>
+                    <Line col="0" id="199">
+                        <Point col="0" x="16.240212016" y="38.521156783" z="0" id="2091" />
+                        <Point col="0" x="19.240262467" y="38.980747608" z="0" id="2092" />
+                    </Line>
+                    <Line col="0" id="200">
+                        <Point col="0" x="19.240262467" y="38.980747608" z="0" id="2087" />
+                        <Point col="0" x="22.271416663" y="38.827024865" z="0" id="2088" />
+                    </Line>
+                    <Line col="0" id="201">
+                        <Point col="0" x="22.271416663" y="38.827024865" z="0" id="2083" />
+                        <Point col="0" x="25.209578793" y="38.066281982" z="0" id="2084" />
+                    </Line>
+                    <Line col="0" id="202">
+                        <Point col="0" x="25.209578793" y="38.066281982" z="0" id="2079" />
+                        <Point col="0" x="27.934460155" y="36.729663862" z="0" id="2080" />
+                    </Line>
+                    <Line col="0" id="203">
+                        <Point col="0" x="27.934460155" y="36.729663862" z="0" id="2075" />
+                        <Point col="0" x="30.334503786" y="34.871891808" z="0" id="2076" />
+                    </Line>
+                    <Line col="0" id="204">
+                        <Point col="0" x="30.334503786" y="34.871891808" z="0" id="2071" />
+                        <Point col="0" x="32.311451618" y="32.569023226" z="0" id="2072" />
+                    </Line>
+                    <Line col="0" id="205">
+                        <Point col="0" x="32.311451618" y="32.569023226" z="0" id="2067" />
+                        <Point col="0" x="33.784367174" y="29.915337827" z="0" id="2068" />
+                    </Line>
+                    <Line col="0" id="206">
+                        <Point col="0" x="33.784367174" y="29.915337827" z="0" id="2063" />
+                        <Point col="0" x="34.692949119" y="27.019477801" z="0" id="2064" />
+                    </Line>
+                    <Line col="0" id="207">
+                        <Point col="0" x="34.692949119" y="27.019477801" z="0" id="2059" />
+                        <Point col="0" x="35" y="24" z="0" id="2060" />
+                    </Line>
+                    <Line col="0" id="208">
+                        <Point col="0" x="35" y="24" z="0" id="2179" />
+                        <Point col="0" x="34.692949119" y="20.980522199" z="0" id="2180" />
+                    </Line>
+                </Sketch>
+                <Fixture title="G54" coordinate_system_number="1" id="1">
+                    <params yz_plane="0" xz_plane="0" xy_plane="0" pivot_point_x="0" pivot_point_y="0" pivot_point_z="0" safety_height_defined="0" safety_height="0" clearance_height="100" touch_off_point_defined="0" touch_off_point_x="0" touch_off_point_y="0" touch_off_description="" />
+                </Fixture>
+                <Fixture title="G55" coordinate_system_number="2" id="2">
+                    <params yz_plane="0" xz_plane="0" xy_plane="0" pivot_point_x="0" pivot_point_y="0" pivot_point_z="0" safety_height_defined="0" safety_height="0" clearance_height="100" touch_off_point_defined="0" touch_off_point_x="0" touch_off_point_y="0" touch_off_description="" />
+                </Fixture>
+            </Inlay>
+        </Operations>
+        <SpeedReferences estimate_when_possible="1" id="1">
+            <SpeedReference title="Aluminium (15) with Carbide" surface_speed="182" tool_material="1" brinell_hardness_of_raw_material="15" raw_material_name="Aluminium" id="1" />
+            <SpeedReference title="Aluminium (15) with Carbide" surface_speed="33" tool_material="1" brinell_hardness_of_raw_material="15" raw_material_name="Aluminium" id="2" />
+            <SpeedReference title="Mild Steel (150) with Carbide" surface_speed="182" tool_material="1" brinell_hardness_of_raw_material="150" raw_material_name="Mild Steel" id="3" />
+            <SpeedReference title="Mild Steel (150) with Carbide" surface_speed="59" tool_material="1" brinell_hardness_of_raw_material="150" raw_material_name="Mild Steel" id="4" />
+            <SpeedReference title="Alloy Steel &lt; 0.3% carbon (200) with Carbide" surface_speed="106" tool_material="1" brinell_hardness_of_raw_material="200" raw_material_name="Alloy Steel &lt; 0.3% carbon" id="5" />
+            <SpeedReference title="Alloy Steel &lt; 0.3% carbon (200) with Carbide" surface_speed="24" tool_material="1" brinell_hardness_of_raw_material="200" raw_material_name="Alloy Steel &lt; 0.3% carbon" id="6" />
+            <SpeedReference title="Alloy Steel &gt; 0.3% carbon (200) with Carbide" surface_speed="99" tool_material="1" brinell_hardness_of_raw_material="200" raw_material_name="Alloy Steel &gt; 0.3% carbon" id="7" />
+            <SpeedReference title="Alloy Steel &gt; 0.3% carbon (200) with Carbide" surface_speed="24" tool_material="1" brinell_hardness_of_raw_material="200" raw_material_name="Alloy Steel &gt; 0.3% carbon" id="8" />
+            <CuttingRate title="Brinell (15) at 400 (mm^3/min)" brinell_hardness_of_raw_material="15" max_material_removal_rate="400" id="1" />
+            <CuttingRate title="Brinell (150) at 1600 (mm^3/min)" brinell_hardness_of_raw_material="150" max_material_removal_rate="1600" id="2" />
+        </SpeedReferences>
+    </Program>
+    <Sketch title="Sketch" id="5">
+        <Line col="0" id="220">
+            <Point col="0" x="24.206267664" y="19.296795913" z="0" id="2936" />
+            <Point col="0" x="22.077075065" y="17.451840023" z="0" id="2935" />
+        </Line>
+        <Line col="0" id="221">
+            <Point col="0" x="22.077075065" y="17.451840023" z="0" id="2932" />
+            <Point col="0" x="19.288425809" y="17.050892791" z="0" id="2931" />
+        </Line>
+        <Line col="0" id="222">
+            <Point col="0" x="19.288425809" y="17.050892791" z="0" id="2928" />
+            <Point col="0" x="16.72569633" y="18.221252128" z="0" id="2927" />
+        </Line>
+        <Line col="0" id="223">
+            <Point col="0" x="16.72569633" y="18.221252128" z="0" id="2924" />
+            <Point col="0" x="15.202535132" y="20.591337216" z="0" id="2923" />
+        </Line>
+        <Line col="0" id="224">
+            <Point col="0" x="15.202535132" y="20.591337216" z="0" id="2920" />
+            <Point col="0" x="15.202535132" y="23.408662784" z="0" id="2919" />
+        </Line>
+        <Line col="0" id="225">
+            <Point col="0" x="15.202535132" y="23.408662784" z="0" id="2916" />
+            <Point col="0" x="16.72569633" y="25.778747872" z="0" id="2915" />
+        </Line>
+        <Line col="0" id="226">
+            <Point col="0" x="16.72569633" y="25.778747872" z="0" id="2912" />
+            <Point col="0" x="19.288425809" y="26.949107209" z="0" id="2911" />
+        </Line>
+        <Line col="0" id="227">
+            <Point col="0" x="19.288425809" y="26.949107209" z="0" id="2908" />
+            <Point col="0" x="22.077075065" y="26.548159977" z="0" id="2907" />
+        </Line>
+        <Line col="0" id="228">
+            <Point col="0" x="22.077075065" y="26.548159977" z="0" id="2904" />
+            <Point col="0" x="24.206267664" y="24.703204087" z="0" id="2903" />
+        </Line>
+        <Line col="0" id="229">
+            <Point col="0" x="24.206267664" y="24.703204087" z="0" id="2900" />
+            <Point col="0" x="25" y="22" z="0" id="2899" />
+        </Line>
+        <Line col="0" id="230">
+            <Point col="0" x="25" y="22" z="0" id="2896" />
+            <Point col="0" x="24.206267664" y="19.296795913" z="0" id="2895" />
+        </Line>
+    </Sketch>
+    <Sketch title="Sketch" id="6">
+        <Line col="0" id="116">
+            <Point col="0" x="29.555728058" y="20.052448256" z="0" id="1227" />
+            <Point col="0" x="28.262387743" y="17.366799419" z="0" id="1228" />
+        </Line>
+        <Line col="0" id="117">
+            <Point col="0" x="28.262387743" y="17.366799419" z="0" id="1223" />
+            <Point col="0" x="26.234898019" y="15.181685175" z="0" id="1224" />
+        </Line>
+        <Line col="0" id="118">
+            <Point col="0" x="26.234898019" y="15.181685175" z="0" id="1219" />
+            <Point col="0" x="23.653410244" y="13.691262514" z="0" id="1220" />
+        </Line>
+        <Line col="0" id="119">
+            <Point col="0" x="23.653410244" y="13.691262514" z="0" id="1215" />
+            <Point col="0" x="20.747300936" y="13.027962028" z="0" id="1216" />
+        </Line>
+        <Line col="0" id="120">
+            <Point col="0" x="20.747300936" y="13.027962028" z="0" id="1211" />
+            <Point col="0" x="17.77479066" y="13.250720878" z="0" id="1212" />
+        </Line>
+        <Line col="0" id="121">
+            <Point col="0" x="17.77479066" y="13.250720878" z="0" id="1207" />
+            <Point col="0" x="15" y="14.339745962" z="0" id="1208" />
+        </Line>
+        <Line col="0" id="122">
+            <Point col="0" x="15" y="14.339745962" z="0" id="1203" />
+            <Point col="0" x="12.669481282" y="16.198272622" z="0" id="1204" />
+        </Line>
+        <Line col="0" id="123">
+            <Point col="0" x="12.669481282" y="16.198272622" z="0" id="1199" />
+            <Point col="0" x="10.990311321" y="18.661162609" z="0" id="1200" />
+        </Line>
+        <Line col="0" id="124">
+            <Point col="0" x="10.990311321" y="18.661162609" z="0" id="1195" />
+            <Point col="0" x="10.111691738" y="21.509577338" z="0" id="1196" />
+        </Line>
+        <Line col="0" id="125">
+            <Point col="0" x="10.111691738" y="21.509577338" z="0" id="1191" />
+            <Point col="0" x="10.111691738" y="24.490422662" z="0" id="1192" />
+        </Line>
+        <Line col="0" id="126">
+            <Point col="0" x="10.111691738" y="24.490422662" z="0" id="1187" />
+            <Point col="0" x="10.990311321" y="27.338837391" z="0" id="1188" />
+        </Line>
+        <Line col="0" id="127">
+            <Point col="0" x="10.990311321" y="27.338837391" z="0" id="1183" />
+            <Point col="0" x="12.669481282" y="29.801727378" z="0" id="1184" />
+        </Line>
+        <Line col="0" id="128">
+            <Point col="0" x="12.669481282" y="29.801727378" z="0" id="1179" />
+            <Point col="0" x="15" y="31.660254038" z="0" id="1180" />
+        </Line>
+        <Line col="0" id="129">
+            <Point col="0" x="15" y="31.660254038" z="0" id="1175" />
+            <Point col="0" x="17.77479066" y="32.749279122" z="0" id="1176" />
+        </Line>
+        <Line col="0" id="130">
+            <Point col="0" x="17.77479066" y="32.749279122" z="0" id="1171" />
+            <Point col="0" x="20.747300936" y="32.972037972" z="0" id="1172" />
+        </Line>
+        <Line col="0" id="131">
+            <Point col="0" x="20.747300936" y="32.972037972" z="0" id="1167" />
+            <Point col="0" x="23.653410244" y="32.308737486" z="0" id="1168" />
+        </Line>
+        <Line col="0" id="132">
+            <Point col="0" x="23.653410244" y="32.308737486" z="0" id="1163" />
+            <Point col="0" x="26.234898019" y="30.818314825" z="0" id="1164" />
+        </Line>
+        <Line col="0" id="133">
+            <Point col="0" x="26.234898019" y="30.818314825" z="0" id="1159" />
+            <Point col="0" x="28.262387743" y="28.633200581" z="0" id="1160" />
+        </Line>
+        <Line col="0" id="134">
+            <Point col="0" x="28.262387743" y="28.633200581" z="0" id="1155" />
+            <Point col="0" x="29.555728058" y="25.947551744" z="0" id="1156" />
+        </Line>
+        <Line col="0" id="135">
+            <Point col="0" x="29.555728058" y="25.947551744" z="0" id="1151" />
+            <Point col="0" x="30" y="23" z="0" id="1152" />
+        </Line>
+        <Line col="0" id="136">
+            <Point col="0" x="30" y="23" z="0" id="1231" />
+            <Point col="0" x="29.555728058" y="20.052448256" z="0" id="1232" />
+        </Line>
+    </Sketch>
+    <Sketch title="Sketch" id="7">
+        <Line col="0" id="137">
+            <Point col="0" x="39.765608476" y="21.947014316" z="0" id="1681" />
+            <Point col="0" x="39.067927841" y="18.965588028" z="0" id="1682" />
+        </Line>
+        <Line col="0" id="138">
+            <Point col="0" x="39.067927841" y="18.965588028" z="0" id="1677" />
+            <Point col="0" x="37.923311139" y="16.125603243" z="0" id="1678" />
+        </Line>
+        <Line col="0" id="139">
+            <Point col="0" x="37.923311139" y="16.125603243" z="0" id="1673" />
+            <Point col="0" x="36.358587215" y="13.493626796" z="0" id="1674" />
+        </Line>
+        <Line col="0" id="140">
+            <Point col="0" x="36.358587215" y="13.493626796" z="0" id="1669" />
+            <Point col="0" x="34.410431872" y="11.131349984" z="0" id="1670" />
+        </Line>
+        <Line col="0" id="141">
+            <Point col="0" x="34.410431872" y="11.131349984" z="0" id="1665" />
+            <Point col="0" x="32.124508219" y="9.094142575" z="0" id="1666" />
+        </Line>
+        <Line col="0" id="142">
+            <Point col="0" x="32.124508219" y="9.094142575" z="0" id="1661" />
+            <Point col="0" x="29.55439637" y="7.429754982" z="0" id="1662" />
+        </Line>
+        <Line col="0" id="143">
+            <Point col="0" x="29.55439637" y="7.429754982" z="0" id="1657" />
+            <Point col="0" x="26.760337568" y="6.17719904" z="0" id="1658" />
+        </Line>
+        <Line col="0" id="144">
+            <Point col="0" x="26.760337568" y="6.17719904" z="0" id="1653" />
+            <Point col="0" x="23.807822183" y="5.3658336" z="0" id="1654" />
+        </Line>
+        <Line col="0" id="145">
+            <Point col="0" x="23.807822183" y="5.3658336" z="0" id="1649" />
+            <Point col="0" x="20.766054674" y="5.014676379" z="0" id="1650" />
+        </Line>
+        <Line col="0" id="146">
+            <Point col="0" x="20.766054674" y="5.014676379" z="0" id="1645" />
+            <Point col="0" x="17.706331492" y="5.131958205" z="0" id="1646" />
+        </Line>
+        <Line col="0" id="147">
+            <Point col="0" x="17.706331492" y="5.131958205" z="0" id="1641" />
+            <Point col="0" x="14.700369956" y="5.714930091" z="0" id="1642" />
+        </Line>
+        <Line col="0" id="148">
+            <Point col="0" x="14.700369956" y="5.714930091" z="0" id="1637" />
+            <Point col="0" x="11.818627257" y="6.74992767" z="0" id="1638" />
+        </Line>
+        <Line col="0" id="149">
+            <Point col="0" x="11.818627257" y="6.74992767" z="0" id="1633" />
+            <Point col="0" x="9.128649" y="8.212691477" z="0" id="1634" />
+        </Line>
+        <Line col="0" id="150">
+            <Point col="0" x="9.128649" y="8.212691477" z="0" id="1629" />
+            <Point col="0" x="6.693485997" y="10.068935568" z="0" id="1630" />
+        </Line>
+        <Line col="0" id="151">
+            <Point col="0" x="6.693485997" y="10.068935568" z="0" id="1625" />
+            <Point col="0" x="4.570216404" y="12.275151153" z="0" id="1626" />
+        </Line>
+        <Line col="0" id="152">
+            <Point col="0" x="4.570216404" y="12.275151153" z="0" id="1621" />
+            <Point col="0" x="2.80860786" y="14.779626411" z="0" id="1622" />
+        </Line>
+        <Line col="0" id="153">
+            <Point col="0" x="2.80860786" y="14.779626411" z="0" id="1617" />
+            <Point col="0" x="1.449950978" y="17.523658563" z="0" id="1618" />
+        </Line>
+        <Line col="0" id="154">
+            <Point col="0" x="1.449950978" y="17.523658563" z="0" id="1613" />
+            <Point col="0" x="0.526091522" y="20.442929822" z="0" id="1614" />
+        </Line>
+        <Line col="0" id="155">
+            <Point col="0" x="0.526091522" y="20.442929822" z="0" id="1609" />
+            <Point col="0" x="0.0586839763" y="23.469014943" z="0" id="1610" />
+        </Line>
+        <Line col="0" id="156">
+            <Point col="0" x="0.0586839763" y="23.469014943" z="0" id="1605" />
+            <Point col="0" x="0.0586839763" y="26.530985057" z="0" id="1606" />
+        </Line>
+        <Line col="0" id="157">
+            <Point col="0" x="0.0586839763" y="26.530985057" z="0" id="1601" />
+            <Point col="0" x="0.526091522" y="29.557070178" z="0" id="1602" />
+        </Line>
+        <Line col="0" id="158">
+            <Point col="0" x="0.526091522" y="29.557070178" z="0" id="1597" />
+            <Point col="0" x="1.449950978" y="32.476341437" z="0" id="1598" />
+        </Line>
+        <Line col="0" id="159">
+            <Point col="0" x="1.449950978" y="32.476341437" z="0" id="1593" />
+            <Point col="0" x="2.80860786" y="35.220373589" z="0" id="1594" />
+        </Line>
+        <Line col="0" id="160">
+            <Point col="0" x="2.80860786" y="35.220373589" z="0" id="1589" />
+            <Point col="0" x="4.570216404" y="37.724848847" z="0" id="1590" />
+        </Line>
+        <Line col="0" id="161">
+            <Point col="0" x="4.570216404" y="37.724848847" z="0" id="1585" />
+            <Point col="0" x="6.693485997" y="39.931064432" z="0" id="1586" />
+        </Line>
+        <Line col="0" id="162">
+            <Point col="0" x="6.693485997" y="39.931064432" z="0" id="1581" />
+            <Point col="0" x="9.128649" y="41.787308523" z="0" id="1582" />
+        </Line>
+        <Line col="0" id="163">
+            <Point col="0" x="9.128649" y="41.787308523" z="0" id="1577" />
+            <Point col="0" x="11.818627257" y="43.25007233" z="0" id="1578" />
+        </Line>
+        <Line col="0" id="164">
+            <Point col="0" x="11.818627257" y="43.25007233" z="0" id="1573" />
+            <Point col="0" x="14.700369956" y="44.285069909" z="0" id="1574" />
+        </Line>
+        <Line col="0" id="165">
+            <Point col="0" x="14.700369956" y="44.285069909" z="0" id="1569" />
+            <Point col="0" x="17.706331492" y="44.868041795" z="0" id="1570" />
+        </Line>
+        <Line col="0" id="166">
+            <Point col="0" x="17.706331492" y="44.868041795" z="0" id="1565" />
+            <Point col="0" x="20.766054674" y="44.985323621" z="0" id="1566" />
+        </Line>
+        <Line col="0" id="167">
+            <Point col="0" x="20.766054674" y="44.985323621" z="0" id="1561" />
+            <Point col="0" x="23.807822183" y="44.6341664" z="0" id="1562" />
+        </Line>
+        <Line col="0" id="168">
+            <Point col="0" x="23.807822183" y="44.6341664" z="0" id="1557" />
+            <Point col="0" x="26.760337568" y="43.82280096" z="0" id="1558" />
+        </Line>
+        <Line col="0" id="169">
+            <Point col="0" x="26.760337568" y="43.82280096" z="0" id="1553" />
+            <Point col="0" x="29.55439637" y="42.570245018" z="0" id="1554" />
+        </Line>
+        <Line col="0" id="170">
+            <Point col="0" x="29.55439637" y="42.570245018" z="0" id="1549" />
+            <Point col="0" x="32.124508219" y="40.905857425" z="0" id="1550" />
+        </Line>
+        <Line col="0" id="171">
+            <Point col="0" x="32.124508219" y="40.905857425" z="0" id="1545" />
+            <Point col="0" x="34.410431872" y="38.868650016" z="0" id="1546" />
+        </Line>
+        <Line col="0" id="172">
+            <Point col="0" x="34.410431872" y="38.868650016" z="0" id="1541" />
+            <Point col="0" x="36.358587215" y="36.506373204" z="0" id="1542" />
+        </Line>
+        <Line col="0" id="173">
+            <Point col="0" x="36.358587215" y="36.506373204" z="0" id="1537" />
+            <Point col="0" x="37.923311139" y="33.874396757" z="0" id="1538" />
+        </Line>
+        <Line col="0" id="174">
+            <Point col="0" x="37.923311139" y="33.874396757" z="0" id="1533" />
+            <Point col="0" x="39.067927841" y="31.034411972" z="0" id="1534" />
+        </Line>
+        <Line col="0" id="175">
+            <Point col="0" x="39.067927841" y="31.034411972" z="0" id="1529" />
+            <Point col="0" x="39.765608476" y="28.052985684" z="0" id="1530" />
+        </Line>
+        <Line col="0" id="176">
+            <Point col="0" x="39.765608476" y="28.052985684" z="0" id="1525" />
+            <Point col="0" x="40" y="25" z="0" id="1526" />
+        </Line>
+        <Line col="0" id="177">
+            <Point col="0" x="40" y="25" z="0" id="1685" />
+            <Point col="0" x="39.765608476" y="21.947014316" z="0" id="1686" />
+        </Line>
+    </Sketch>
+    <Sketch title="Sketch" id="8">
+        <Line col="0" id="178">
+            <Point col="0" x="34.692949119" y="20.980522199" z="0" id="2175" />
+            <Point col="0" x="33.784367174" y="18.084662173" z="0" id="2176" />
+        </Line>
+        <Line col="0" id="179">
+            <Point col="0" x="33.784367174" y="18.084662173" z="0" id="2171" />
+            <Point col="0" x="32.311451618" y="15.430976774" z="0" id="2172" />
+        </Line>
+        <Line col="0" id="180">
+            <Point col="0" x="32.311451618" y="15.430976774" z="0" id="2167" />
+            <Point col="0" x="30.334503786" y="13.128108192" z="0" id="2168" />
+        </Line>
+        <Line col="0" id="181">
+            <Point col="0" x="30.334503786" y="13.128108192" z="0" id="2163" />
+            <Point col="0" x="27.934460155" y="11.270336138" z="0" id="2164" />
+        </Line>
+        <Line col="0" id="182">
+            <Point col="0" x="27.934460155" y="11.270336138" z="0" id="2159" />
+            <Point col="0" x="25.209578793" y="9.933718018" z="0" id="2160" />
+        </Line>
+        <Line col="0" id="183">
+            <Point col="0" x="25.209578793" y="9.933718018" z="0" id="2155" />
+            <Point col="0" x="22.271416663" y="9.172975135" z="0" id="2156" />
+        </Line>
+        <Line col="0" id="184">
+            <Point col="0" x="22.271416663" y="9.172975135" z="0" id="2151" />
+            <Point col="0" x="19.240262467" y="9.019252392" z="0" id="2152" />
+        </Line>
+        <Line col="0" id="185">
+            <Point col="0" x="19.240262467" y="9.019252392" z="0" id="2147" />
+            <Point col="0" x="16.240212016" y="9.478843217" z="0" id="2148" />
+        </Line>
+        <Line col="0" id="186">
+            <Point col="0" x="16.240212016" y="9.478843217" z="0" id="2143" />
+            <Point col="0" x="13.394087727" y="10.532931906" z="0" id="2144" />
+        </Line>
+        <Line col="0" id="187">
+            <Point col="0" x="13.394087727" y="10.532931906" z="0" id="2139" />
+            <Point col="0" x="10.818410262" y="12.138363946" z="0" id="2140" />
+        </Line>
+        <Line col="0" id="188">
+            <Point col="0" x="10.818410262" y="12.138363946" z="0" id="2135" />
+            <Point col="0" x="8.61862816" y="14.229412759" z="0" id="2136" />
+        </Line>
+        <Line col="0" id="189">
+            <Point col="0" x="8.61862816" y="14.229412759" z="0" id="2131" />
+            <Point col="0" x="6.884800758" y="16.720470562" z="0" id="2132" />
+        </Line>
+        <Line col="0" id="190">
+            <Point col="0" x="6.884800758" y="16.720470562" z="0" id="2127" />
+            <Point col="0" x="5.687911154" y="19.509553155" z="0" id="2128" />
+        </Line>
+        <Line col="0" id="191">
+            <Point col="0" x="5.687911154" y="19.509553155" z="0" id="2123" />
+            <Point col="0" x="5.076960149" y="22.48247517" z="0" id="2124" />
+        </Line>
+        <Line col="0" id="192">
+            <Point col="0" x="5.076960149" y="22.48247517" z="0" id="2119" />
+            <Point col="0" x="5.076960149" y="25.51752483" z="0" id="2120" />
+        </Line>
+        <Line col="0" id="193">
+            <Point col="0" x="5.076960149" y="25.51752483" z="0" id="2115" />
+            <Point col="0" x="5.687911154" y="28.490446845" z="0" id="2116" />
+        </Line>
+        <Line col="0" id="194">
+            <Point col="0" x="5.687911154" y="28.490446845" z="0" id="2111" />
+            <Point col="0" x="6.884800758" y="31.279529438" z="0" id="2112" />
+        </Line>
+        <Line col="0" id="195">
+            <Point col="0" x="6.884800758" y="31.279529438" z="0" id="2107" />
+            <Point col="0" x="8.61862816" y="33.770587241" z="0" id="2108" />
+        </Line>
+        <Line col="0" id="196">
+            <Point col="0" x="8.61862816" y="33.770587241" z="0" id="2103" />
+            <Point col="0" x="10.818410262" y="35.861636054" z="0" id="2104" />
+        </Line>
+        <Line col="0" id="197">
+            <Point col="0" x="10.818410262" y="35.861636054" z="0" id="2099" />
+            <Point col="0" x="13.394087727" y="37.467068094" z="0" id="2100" />
+        </Line>
+        <Line col="0" id="198">
+            <Point col="0" x="13.394087727" y="37.467068094" z="0" id="2095" />
+            <Point col="0" x="16.240212016" y="38.521156783" z="0" id="2096" />
+        </Line>
+        <Line col="0" id="199">
+            <Point col="0" x="16.240212016" y="38.521156783" z="0" id="2091" />
+            <Point col="0" x="19.240262467" y="38.980747608" z="0" id="2092" />
+        </Line>
+        <Line col="0" id="200">
+            <Point col="0" x="19.240262467" y="38.980747608" z="0" id="2087" />
+            <Point col="0" x="22.271416663" y="38.827024865" z="0" id="2088" />
+        </Line>
+        <Line col="0" id="201">
+            <Point col="0" x="22.271416663" y="38.827024865" z="0" id="2083" />
+            <Point col="0" x="25.209578793" y="38.066281982" z="0" id="2084" />
+        </Line>
+        <Line col="0" id="202">
+            <Point col="0" x="25.209578793" y="38.066281982" z="0" id="2079" />
+            <Point col="0" x="27.934460155" y="36.729663862" z="0" id="2080" />
+        </Line>
+        <Line col="0" id="203">
+            <Point col="0" x="27.934460155" y="36.729663862" z="0" id="2075" />
+            <Point col="0" x="30.334503786" y="34.871891808" z="0" id="2076" />
+        </Line>
+        <Line col="0" id="204">
+            <Point col="0" x="30.334503786" y="34.871891808" z="0" id="2071" />
+            <Point col="0" x="32.311451618" y="32.569023226" z="0" id="2072" />
+        </Line>
+        <Line col="0" id="205">
+            <Point col="0" x="32.311451618" y="32.569023226" z="0" id="2067" />
+            <Point col="0" x="33.784367174" y="29.915337827" z="0" id="2068" />
+        </Line>
+        <Line col="0" id="206">
+            <Point col="0" x="33.784367174" y="29.915337827" z="0" id="2063" />
+            <Point col="0" x="34.692949119" y="27.019477801" z="0" id="2064" />
+        </Line>
+        <Line col="0" id="207">
+            <Point col="0" x="34.692949119" y="27.019477801" z="0" id="2059" />
+            <Point col="0" x="35" y="24" z="0" id="2060" />
+        </Line>
+        <Line col="0" id="208">
+            <Point col="0" x="35" y="24" z="0" id="2179" />
+            <Point col="0" x="34.692949119" y="20.980522199" z="0" id="2180" />
+        </Line>
+    </Sketch>
+</HeeksCAD_Document>
