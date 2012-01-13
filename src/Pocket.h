@@ -98,10 +98,10 @@ public:
 	static void ReadFromConfig();
 	static void WriteToConfig();
 
-    static void DetailSpan(Span &span);
-    static void DetailVertex(CVertex &vertex);
-    static void DetailCurve(CCurve &curve);
-    static void DetailArea(CArea &area);
+    static void DetailSpan(const Span &span);
+    static void DetailVertex(const CVertex &vertex);
+    static void DetailCurve(const CCurve &curve);
+    static void DetailArea(const CArea &area);
     // LibAREA conversion functions
 	static bool ConvertSketchesToArea(
       std::list<HeeksObj *> &sketches,

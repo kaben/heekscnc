@@ -1246,7 +1246,7 @@ bool CPocket::ConvertSketchesToArea(
   return did_generate_pocket;
 }
 
-void CPocket::DetailSpan(Span &span)
+void CPocket::DetailSpan(const Span &span)
 {
   dprintf("  span: is_start_span:%d, p:(%g, %g), v.type:%d, v.p:(%g, %g), v.c:(%g, %g)\n",
     span.m_start_span,
@@ -1257,7 +1257,7 @@ void CPocket::DetailSpan(Span &span)
   );
 }
 
-void CPocket::DetailVertex(CVertex &vertex)
+void CPocket::DetailVertex(const CVertex &vertex)
 {
   dprintf("  vertex: type:%d, p:(%g, %g), c:(%g, %g)\n",
     vertex.m_type,
@@ -1266,29 +1266,30 @@ void CPocket::DetailVertex(CVertex &vertex)
   );
 }
 
-void CPocket::DetailCurve(CCurve &curve)
+void CPocket::DetailCurve(const CCurve &curve)
 {
   dprintf("entered ...\n");
   dprintf("new curve ...\n");
+  dprintf("recur depth:%d\n", curve.m_recur_depth);
   dprintf("IsClosed():%d\n", curve.IsClosed());
   dprintf("IsClockwise():%d\n", curve.IsClockwise());
   dprintf("as vertices:\n");
-  for(std::list<CVertex>::iterator v = curve.m_vertices.begin(); v != curve.m_vertices.end(); v++){
+  for(std::list<CVertex>::const_iterator v = curve.m_vertices.begin(); v != curve.m_vertices.end(); v++){
     DetailVertex(*v);
   }
   dprintf("as spans:\n");
   std::list<Span> spans;
   curve.GetSpans(spans);
-  for(std::list<Span>::iterator s = spans.begin(); s != spans.end(); s++){
+  for(std::list<Span>::const_iterator s = spans.begin(); s != spans.end(); s++){
     DetailSpan(*s);
   }
   dprintf("... done.\n");
 }
 
-void CPocket::DetailArea(CArea &area)
+void CPocket::DetailArea(const CArea &area)
 {
   dprintf("entered ...\n");
-  for(std::list<CCurve>::iterator c = area.m_curves.begin(); c != area.m_curves.end(); c++){
+  for(std::list<CCurve>::const_iterator c = area.m_curves.begin(); c != area.m_curves.end(); c++){
     dprintf("new curve ...\n");
     DetailCurve(*c);
   }
