@@ -30,6 +30,7 @@
 #include "Program.h"
 
 #include "Area.h"
+#include "AreaOrderer.h"
 #include "Curve.h"
 
 #include "interface/TestMacros.h"
@@ -313,6 +314,7 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 
 	python << CDepthOp::AppendTextToProgram( pMachineState );
 
+    /* Demonstration: convert a list of sketches to an area. */
 	dprintf("ConvertSketchesToArea(children, area, pMachineState) ...\n");
     CArea area;
     bool result = false;
@@ -323,13 +325,24 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
     CPocket::DetailArea(area);
     dprintf("... DetailArea(area) done.\n");
 
+    /* Demonstration: round corners to radius of 1.5. */
     if(false){
-      /* Demonstration: convert an area to a list of sketches. */
+      /* These two lines round the inside corners (i.e., convex corners). */
+      area.Offset(+1.5);
+      area.Offset(-1.5);
+      /* These two lines round the outside corners (i.e., concave corners). */
+      area.Offset(-1.5);
+      area.Offset(+1.5);
+    }
+
+    /* Demonstration: convert an area to a list of sketches. */
+    if(false){
       dprintf("ConvertAreaToSketches(area, sketches, pMachineState) ...\n");
       std::list<HeeksObj *> sketches;
       result = CPocket::ConvertAreaToSketches(area, sketches, pMachineState, 2.0);
       dprintf("... ConvertAreaToSketches(area, sketches, pMachineState) done.\n");
 
+      /* This line generates a toolpath from the sketches. */
       dprintf("GeneratePathFromSketches(sketches, pMachineState) ...\n");
       python << GeneratePathFromSketches(
         sketches,
@@ -349,6 +362,8 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       dprintf("... DetailArea(a2) done.\n");
     }
 
+    /* Demonstration: pocket via direct call to LibAREA. */
+    /* Demonstration: convert a curve to a sketch. */
     if(true){
 	  dprintf("building CAreaPocketParams() ...\n");
       //double tool_radius = CTool::Find(m_tool_number)->CuttingRadius();
@@ -382,16 +397,54 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       area.RecursivePocket(toolpath, params);
 	  dprintf("... RecursivePocket() done.\n");
 
+      /* Construct tree of nested curves. */
+      CAreaOrderer ao;
+      for(std::list<CCurve>::iterator c = toolpath.begin(); c != toolpath.end(); c++) {
+        CCurve& curve = *c;
+        ao.Insert(&curve);
+      }
+
+      /* Traverse tree of nested curves. */
+      dprintf("traversing tree of nested curves ...\n");
+	  std::list<const CInnerCurves*> inner_curve_q;
+      inner_curve_q.push_back(ao.m_top_level);
+      while(!inner_curve_q.empty()){
+        dprintf("examining next curve ...\n");
+        const CInnerCurves *ic = *(inner_curve_q.begin());
+        inner_curve_q.pop_front();
+
+        if(ic->m_curve){
+          dprintf("curve details ...\n");
+          CPocket::DetailCurve(*(ic->m_curve));
+        } else {
+          dprintf("this inner curve contains no CCurve element (so it must be the top level).\n");
+        }
+
+        if(ic->m_inner_curves.empty()){
+          dprintf("this inner curve contains no nested inner curves (so it must be a bottom level).\n");
+        }
+	    for(
+          std::set<CInnerCurves*>::const_iterator nested_ic = ic->m_inner_curves.begin();
+          nested_ic != ic->m_inner_curves.end();
+          nested_ic++
+        ){
+          dprintf("queueing a nested inner curve ...\n");
+          inner_curve_q.push_back(*nested_ic); 
+        }
+      }
+      dprintf("... done traversing tree of nested curves.\n");
+
       std::list<HeeksObj *> sketches;
-      double z = 1.;
+      double z = 0.;
       int num_curves = toolpath.size();
       int curve_num = 0;
       dprintf("converting %d curves ...\n", num_curves);
       for(std::list<CCurve>::iterator c = toolpath.begin(); c != toolpath.end(); c++){
         curve_num++;
         dprintf("(curve %d/%d) converting curve ...\n", curve_num, num_curves);
-        z += 1.;
+        z = c->m_recur_depth;
         c->RemoveTinySpans();
+        dprintf("c->m_recur_depth: %d\n", c->m_recur_depth);
         HeeksObj *sketch = heeksCAD->NewSketch();
         CPocket::ConvertCurveToSketch(*c, sketch, pMachineState, z);
         //std::list<TopoDS_Shape> wires;
@@ -1105,12 +1158,6 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 	typedef double Depth_t;
 	CTool *pChamferingBit = CTool::Find( m_tool_number );
 
-    /* Demonstration: convert an area to a list of sketches. */
-	//dprintf("ConvertAreaToSketches(...) ...\n");
-	//std::list<HeeksObj *> sketches;
-    //result = CPocket::ConvertAreaToSketches(area, sketches, pMachineState);
-	//dprintf("... ConvertAreaToSketches(...) done.\n");
-
     // For all selected sketches.
 	int num_children = GetNumChildren();
 	int child_num = 0;
@@ -1122,7 +1169,7 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 		if (object->GetType() != SketchType)
 		{
 			//printf("Skipping non-sketch child\n");
-	    dprintf("(child_num %d/%d) skipping non-sketch child ...\n", child_num, num_children);
+			dprintf("(child_num %d/%d) skipping non-sketch child ...\n", child_num, num_children);
 			continue;
 		}
 
@@ -1140,14 +1187,13 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 			    // For all wires in this sketch...
 				for(std::list<TopoDS_Shape>::iterator It2 = wires.begin(); It2 != wires.end(); It2++)
 				{
-					wire_num++;
-	        dprintf("(child_num %d/%d) (wire_num %d/%d) fixing wire order ...\n", child_num, num_children, wire_num, num_wires);
+					wire_num++; dprintf("(child_num %d/%d) (wire_num %d/%d) fixing wire order ...\n", child_num, num_children, wire_num, num_wires);
 					TopoDS_Shape& wire_to_fix = *It2;
 					ShapeFix_Wire fix;
 					fix.Load( TopoDS::Wire(wire_to_fix) );
 					fix.FixReorder();
 
-	                dprintf("(child_num %d/%d) (wire_num %d/%d) converting fix back to wire ...\n", child_num, num_children, wire_num, num_wires);
+					dprintf("(child_num %d/%d) (wire_num %d/%d) converting fix back to wire ...\n", child_num, num_children, wire_num, num_wires);
 					TopoDS_Shape wire = fix.Wire();
 
 					// DO NOT align wires with the fixture YET.  When we form
@@ -1161,7 +1207,6 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
                     // the clearance tool.  From this point outwards (or inwards for male operations)
                     // we need to move sideways by half the chamfering bit's diameter until we hit the
                     // outer edge.
-
                     double angle = pChamferingBit->m_params.m_cutting_edge_angle / 360.0 * 2.0 * PI;
                     double max_offset = (m_depth_op_params.m_start_depth - m_depth_op_params.m_final_depth) * tan(angle);
 
@@ -1171,23 +1216,18 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
                     analysis.Load(fix.Wire());
                     max_offset = FindMaxOffset( max_offset, TopoDS::Wire(wire), m_depth_op_params.m_step_down * tan(angle) / 10.0 );
 
-
                     double max_plunge_possible = max_offset * tan(angle);
 
                     // We know how far down the bit could be plunged based on the bit's geometry as well
                     // as the sketech's geometry.  See if this is too deep for our use.
                     double max_plunge_for_chamfering_bit = pChamferingBit->m_params.m_cutting_edge_height * cos(angle);
                     double plunge = max_plunge_possible;
-                    if (plunge > max_plunge_for_chamfering_bit)
-                    {
-                        plunge = max_plunge_for_chamfering_bit;
-                    }
+                    if (plunge > max_plunge_for_chamfering_bit) { plunge = max_plunge_for_chamfering_bit; }
 
                     // We need to keep a record of the wires we've machined so that we can figure out what
-                    // shapenning moves (clearing out the corners) we need to make at the end.  These will
+                    // sharpening moves (clearing out the corners) we need to make at the end.  These will
                     // be between concave corners of adjacent edges and will move up to the corresponding
                     // corners of the edge shape immediately above.
-
                     Valley_t valley;
 
                     // Even though we didn't machine this top wire, we need to use it to generate the
@@ -1203,39 +1243,55 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 					Depths_t depths;
 
                     // machine at this depth around the wire in ever increasing loops until we hit the outside wire (offset = 0)
+                    /*
+                    Actually, the above comment doesn't seem to describe what's
+                    actually happening. I could be totally wrong, of course,
+                    and I often am... but it looks to me like at each offset
+                    we're machining at ever-increasing depths
+                    */
 	                dprintf("(child_num %d/%d) (wire_num %d/%d) machining around this wire in ever increasing loops until we hit outside wire ...\n", child_num, num_children, wire_num, num_wires);
-                    for (double offset = max_offset; offset >= tolerance; /* decrement within loop */ )
-                    {
+                    for (double offset = max_offset; offset >= tolerance; /* decrement within loop */ ) {
 	                    dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) next loop ...\n", child_num, num_children, wire_num, num_wires, offset);
                         double max_depth = offset / tan(angle) * -1.0;
                         double step_down = m_depth_op_params.m_step_down;
-                        if (m_depth_op_params.m_step_down > (-1.0 * max_depth))
-                        {
-                            step_down = max_depth * -1.0;
-                        }
-                        else
-                        {
-                            step_down = m_depth_op_params.m_step_down;
-                        }
+                        if (m_depth_op_params.m_step_down > (-1.0 * max_depth)) { step_down = max_depth * -1.0; }
+                        /* Next line is redundant: step_down already initialized to this value. */
+                        else { step_down = m_depth_op_params.m_step_down; }
 	                    dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) max_depth: %g, step_down: %g ...\n", child_num, num_children, wire_num, num_wires, offset, max_depth, step_down);
 
-                        for (double depth = m_depth_op_params.m_start_depth - step_down; ((step_down > tolerance) && (depth >= max_depth)); /* increment within loop */ )
-                        {
+                        /*
+                        Apparently the forloop below was combined with an
+                        ifclause testing (step_down > tolerance); but step_down
+                        is never altered inside of the for loop. So this test
+                        need be run only once, outside of the forloop, instead
+                        of at every iteration.
+                        */
+                        for (double depth = m_depth_op_params.m_start_depth - step_down; ((step_down > tolerance) && (depth >= max_depth)); /* increment within loop */ ) {
 	                        dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) next loop ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 							if (std::find(depths.begin(), depths.end(), depth) == depths.end()) depths.push_back( depth );
 
 							// Machine here with the chamfering bit.
 							try {
+                                /*
+                                We try to make a copy of the wire, offset
+                                inward by "offset" amount. If this succeeds, we
+                                translate downward by "depth", and then save
+                                the wire in a new Path instance. We also record
+                                both the offset and the depth amounts in the
+                                new Path instance. We then save the path into
+                                the Valley for this wire.
+                                */
+                                /* Offset inward by "offset" amount. */
 	                            dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) offset_wire(...)  ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 								BRepOffsetAPI_MakeOffset offset_wire(TopoDS::Wire(wire));
 	                            dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) offset_wire.Perform(...)  ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 								offset_wire.Perform(offset * -1.0);
 
-								if (offset_wire.IsDone())
-								{
+								if (offset_wire.IsDone()) {
 	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) TopoDS::Wire(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									TopoDS_Wire toolpath = TopoDS::Wire(offset_wire.Shape());
 									gp_Trsf translation;
+                                    /* Z-axis translation by "depth" amount. */
 									translation.SetTranslation( gp_Vec( gp_Pnt(0,0,0), gp_Pnt( 0,0,depth)));
 	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) translate(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									BRepBuilderAPI_Transform translate(translation);
@@ -1244,6 +1300,11 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 	                                dprintf("(child_num %d/%d) (wire_num %d/%d) (offset %g) (depth %g) TopoDS::Wire(...) ...\n", child_num, num_children, wire_num, num_wires, offset, depth);
 									toolpath = TopoDS::Wire(translate.Shape());
 
+                                    /*
+                                    Save offset and translated wire, also
+                                    recording offset and depth amounts, to
+                                    valley for the original wire.
+                                    */
                                     Path path;
                                     path.Depth(depth);
                                     path.Offset(offset);
@@ -1257,41 +1318,59 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 								Handle_Standard_Failure e = Standard_Failure::Caught();
 							} // End catch
 
-                            if ((depth - step_down) > max_depth)
-                            {
-                                depth -= step_down;
-                            }
-                            else
-                            {
-                                if (depth > max_depth)
-                                {
-                                    depth = max_depth;
-                                }
-                                else
-                                {
-                                    depth = max_depth - 1.0;  // Force exit from loop
-                                }
+                            if ((depth - step_down) > max_depth) { depth -= step_down; }
+                            else {
+                                if (depth > max_depth) { depth = max_depth; }
+                                else { depth = max_depth - 1.0; } // Force exit from loop
                             }
                         } // End for
 
-                        if ((offset - (pChamferingBit->m_params.m_diameter / 1.0)) > tolerance)
-                        {
-                            offset -= (pChamferingBit->m_params.m_diameter / 1.0);
-                        }
-                        else
-                        {
-                            if (offset > tolerance)
-                            {
-                                offset = tolerance;
-                            }
-                            else
-                            {
+                        /*
+                        Check to see whether we need to perform another offset.
+
+                        Do this by checking whether offset will still be
+                        outside of tolerance if decremented by tool diameter
+                        (should actually be radius). If so, go ahead and
+                        decrement.
+
+                        If not, then check whether current offset is outside
+                        tolerance. If so, set it exactly equal to tolerance.
+                        */
+                        /*
+                        Why, exactly, are we dividing by one, which is the same
+                        as not dividing at all?
+
+                        And, anyway, for the chamfering bit, shouldn't we be
+                        decrementing by its radius instead of its diameter?
+                        */
+                        if ((offset - (pChamferingBit->m_params.m_diameter / 1.0)) > tolerance) { offset -= (pChamferingBit->m_params.m_diameter / 1.0); }
+                        else {
+                            if (offset > tolerance) { offset = tolerance; }
+                            else {
+                                /*
+                                So when offset <= tolerance, we set it to half
+                                the tolerance? Why exactly? Is it because the
+                                sum of male and female offsets would then equal
+                                the tolerance? I just fail to understand.
+
+                                Bess proposes it is to guarantee exiting the
+                                for loop. This should be done anyway with the
+                                "break" command.
+
+                                I think that this next line, together with the
+                                forloop conditions, appears to guarantee that
+                                final offset will exactly equal half the
+                                tolerance.
+
+                                Bess observes similarity to earlier block where
+                                depth is decremented, and that in that block
+                                the intent is to force exit from loop.
+                                */
                                 offset = tolerance / 2.0;
                                 break;
                             }
                         }
                     } // End for
-
 					valleys.push_back(valley);
 				} // End for
 			} // End try
@@ -1301,8 +1380,7 @@ CInlay::Valleys_t CInlay::DefineValleys(CMachineState *pMachineState)
 			} // End catch
 	        dprintf("(child_num %d/%d) ... done converting to list of wires.\n", child_num, num_children);
 		} // End if - then
-		else
-		{
+		else {
 	        dprintf("(child_num %d/%d) ... could not convert sketch %d to list of wires.\n", child_num, num_children, object->m_id);
 			printf("Could not convert sketch id%d to wire\n", object->m_id );
 		}
