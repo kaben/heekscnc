@@ -29,9 +29,16 @@
 #include "MachineState.h"
 #include "Program.h"
 
+/* LibAREA headers. */
 #include "Area.h"
 #include "AreaOrderer.h"
 #include "Curve.h"
+
+/* OpenVoronoi headers. */
+#include "openvoronoi/voronoidiagram.hpp"
+#include "openvoronoi/polygon_interior.hpp"
+#include "openvoronoi/medial_axis.hpp"
+#include "openvoronoi/offset.hpp"
 
 #include "interface/TestMacros.h"
 
@@ -314,6 +321,87 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 
 	python << CDepthOp::AppendTextToProgram( pMachineState );
 
+    /* OpenVoronoi experiment. */
+    {
+      ovd::VoronoiDiagram vd(2.,100);
+      dprintf("... OpenVoronoi version: %s\n", vd.version().c_str());
+
+      //ovd::Point p0(-0.1,-0.2);
+      //ovd::Point p1(0.2,0.1);
+      //ovd::Point p2(0.4,0.2);
+      //ovd::Point p3(0.6,0.6);
+      //ovd::Point p4(-0.6,0.3);
+	  std::list<HeeksObj *> children(GetChildren());
+      TranslateScale ts;
+      bool result = CPocket::ConvertSketchesToOVD(children, vd, ts, pMachineState);
+
+      ovd::HEGraph& g = vd.get_graph_reference();
+      ovd::PolygonInterior pi(g);
+      ovd::MedialAxis ma(g);
+      ovd::MedialAxisWalk maw(g);
+      ovd::ChainList toolpath = maw.walk();
+      double p[3];
+      python << _T("comment(") << PythonString(_("medial axis walk")) << _T(")\n");
+      {
+        // Up to clearance height.
+        CNCPoint temp(pMachineState->Location());
+        temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+        python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+        pMachineState->Location(temp);
+      }
+      BOOST_FOREACH( ovd::Chain chain, toolpath ) { // loop through each chain
+        python << _T("comment(") << PythonString(_("medial axis chain")) << _T(")\n");
+        int n = 0;
+        BOOST_FOREACH( ovd::MedialPointList move, chain ) { // loop through each point-list
+          python << _T("comment(") << PythonString(_("medial axis")) << _T(")\n");
+          BOOST_FOREACH( ovd::MedialPoint pt_dist, move ) { // loop through each Point/distance
+            ts.inv_scale_translate(pt_dist.p);
+            ts.inv_scale(pt_dist.clearance_radius);
+            p[0] = pt_dist.p.x;
+            p[1] = pt_dist.p.y;
+            p[2] = -pt_dist.clearance_radius;
+            if (n == 0) {
+              {
+                // Up to clearance height.
+                CNCPoint temp(pMachineState->Location());
+                temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+                python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+                pMachineState->Location(temp);
+              }
+              {
+                CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+                temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+                python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+                pMachineState->Location(temp);
+              }
+              {
+                CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+                python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+                pMachineState->Location(temp);
+              }
+            } else {
+#ifdef STABLE_OPS_ONLY
+              CNCPoint cnc_pt(p);
+#else
+              CNCPoint cnc_pt(pMachineState->Fixture().Adjustment(p));
+#endif
+              //std::cout << "position:" << pt_dist.p << "; clearance_radius:" << pt_dist.clearance_radius << std::endl;;
+              python << _T("feed(x=") << cnc_pt.X(true) << _T(", y=") << cnc_pt.Y(true) << _T(", z=") << cnc_pt.Z(true) << _T(")\n");
+              pMachineState->Location(cnc_pt);
+            }
+            n++;
+          }
+        }
+        {
+          // Now get back up to clearance height.
+          CNCPoint temp(pMachineState->Location());
+          temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+          python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+          pMachineState->Location(temp);
+        }
+      }
+    }
+
     /* Demonstration: convert a list of sketches to an area. */
 	dprintf("ConvertSketchesToArea(children, area, pMachineState) ...\n");
     CArea area;
@@ -324,6 +412,8 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
     dprintf("DetailArea(area) ...\n");
     CPocket::DetailArea(area);
     dprintf("... DetailArea(area) done.\n");
+
+    return python;
 
     /* Demonstration: round corners to radius of 1.5. */
     if(false){

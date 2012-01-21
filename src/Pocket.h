@@ -9,11 +9,17 @@
 #include "DepthOp.h"
 #include "CTool.h"
 
+namespace ovd {
+    class VoronoiDiagram;
+    class Point;
+};
+
 class CPocket;
 class CArea;
 class CCurve;
 class CVertex;
 class Span;
+struct TranslateScale;
 
 class CPocketParams{
 public:
@@ -108,6 +114,13 @@ public:
       CArea &area,
       CMachineState *pMachineState
     );
+	static bool ConvertSketchesToOVD(
+      std::list<HeeksObj *> &sketches,
+      ovd::VoronoiDiagram &vd,
+      TranslateScale &ts,
+      CMachineState *pMachineState
+    );
+
 	static bool ConvertCurveToSketch(
       CCurve& curve,
       HeeksObj *sketch,
@@ -120,10 +133,48 @@ public:
       CMachineState *pMachineState,
       double z = 0.
     );
+
     /* Possibly implement, if they look like they're needed. */
+    //static bool ConvertOVDMedialPointListToSketch(
+    //  ovd::MedialPointList,
+    //  TranslateScale &ts,
+    //  std::list<HeeksObj *> &sketches,
+    //  CMachineState *pMachineState,
+    //  double z = 0.
+    //);
+    //static bool ConvertOVDChainToSketches(
+    //  ovd::Chain,
+    //  TranslateScale &ts,
+    //  std::list<HeeksObj *> &sketches,
+    //  CMachineState *pMachineState,
+    //  double z = 0.
+    //);
 	//static bool ConvertFaceToArea(const TopoDS_Face& face, CArea& area, double deviation);
 	//static bool ConvertWireToArea(const TopoDS_Wire& wire, CArea& area, double deviation);
 	//static bool ConvertEdgeToArea(const TopoDS_Edge& edge, CArea& area, double deviation);
 	//static bool ConvertAreaToFace(const CArea& area, std::list<TopoDS_Shape> &face);
 	//static bool ConvertAreaToWire(const CArea& area, std::list<TopoDS_Shape> &wire);
 };
+
+struct TranslateScale {
+    double min_x, min_y;
+    double max_x, max_y;
+    double d_x, d_y;
+    double c_x, c_y;
+    double s, is;
+    double s_x, s_y;
+    double is_x, is_y;
+    void set(ovd::Point &p);
+    void update(ovd::Point &p);
+    void set_translate_scale();
+    void set_translate_scale_fixed_aspect();
+    void translate(ovd::Point &p);
+    void scale(double &d);
+    void scale(ovd::Point &p);
+    void translate_scale(ovd::Point &p);
+    void inv_scale(ovd::Point &p);
+    void inv_scale(double &d);
+    void inv_translate(ovd::Point &p);
+    void inv_scale_translate(ovd::Point &p);
+};
+
