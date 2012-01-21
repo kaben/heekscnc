@@ -25,11 +25,14 @@ include(${wxWidgets_USE_FILE})
 
 include_directories (
     ${CMAKE_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}
-    ${wxWidgets_INCLUDE_DIRS} ${OpenCASCADE_INCLUDE_DIR}
+    ${wxWidgets_INCLUDE_DIRS}
+    ${OpenCASCADE_INCLUDE_DIR}
     ${area_SOURCE_DIR}
     ${area_SOURCE_DIR}/kurve/
     ${area_SOURCE_DIR}/kbool/src/
+    ${OpenVoronoi_SOURCE_DIR}
     ${HeeksCadDir} ../kurve/geometry ../kurve/messages .
+    #${boost_INCLUDE_DIRS}
     )
 set ( LIBRARY_OUTPUT_PATH ../bin )
 
@@ -102,7 +105,7 @@ set( heekscnc_SRCS
    )
 
 add_library( heekscnc SHARED ${heekscnc_SRCS} ${platform_SRCS} ${heekscnc_HDRS} )
-target_link_libraries( heekscnc ${wxWidgets_LIBRARIES}  ${OpenCASCADE_LIBRARIES} heeksarea )
+target_link_libraries( heekscnc ${wxWidgets_LIBRARIES}  ${OpenCASCADE_LIBRARIES} heeksarea openvoronoi_static ${QD_LIBRARY} ${Boost_LIBRARIES})
 set_target_properties( heekscnc PROPERTIES SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH} )
 set_target_properties( heekscnc PROPERTIES LINK_FLAGS -Wl,-Bsymbolic-functions )
 

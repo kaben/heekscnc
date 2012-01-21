@@ -35,6 +35,7 @@ endif()
 #SET(AREA_ROOT ./libarea/build)
 #FIND_PACKAGE(AREA)
 add_subdirectory(libarea)
+add_subdirectory(openvoronoi/src)
 
 include(${wxWidgets_USE_FILE})
 include_directories (
