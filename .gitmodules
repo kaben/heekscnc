@@ -7,3 +7,6 @@
 [submodule "oce"]
 	path = oce
 	url = git@github.com:kaben/oce.git
+[submodule "openvoronoi"]
+	path = openvoronoi
+	url = ./openvoronoi/

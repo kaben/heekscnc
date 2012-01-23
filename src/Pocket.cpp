@@ -36,6 +36,8 @@
 
 #include "interface/TestMacros.h"
 
+#include <boost/progress.hpp>
+
 #include <sstream>
 #include <utility> /* for std::pair */
 #include <map>
@@ -1592,9 +1594,14 @@ bool CPocket::ConvertSketchesToOVD(
 
   dprintf("adding points to voronoi diagram...\n");
   SegIDs seg_ids;
+  int num_loops = loops.size();
+  int loop_num = 0;
   BOOST_FOREACH( ovd::Loop lp, loops ) { // loop through each loop
+    loop_num++;
     bool first = true;
     int last_pt_id = -1;
+    dprintf("adding points for loop %d/%d ...\n", loop_num, num_loops);
+    boost::progress_display show_progress(lp.size());
     BOOST_FOREACH( ovd::Lpt lpt, lp ) { // loop through each line/arc
       ts.translate_scale(lpt.p);
       if (first) {
@@ -1608,6 +1615,7 @@ bool CPocket::ConvertSketchesToOVD(
             pt_ids.add(lpt.p.x, lpt.p.y, last_pt_id);
         }
         //dprintf("last_pt_id:%i\n", last_pt_id);
+        //printf("first pt:id:%d,p:(%g,%g) ... ", last_pt_id, lpt.p.x, lpt.p.y);
       } else {
         //dprintf("pt:p:(%g,%g),r:(%g),c:(%g,%g),cw:%i\n", lpt.p.x, lpt.p.y, lpt.r, lpt.c.x, lpt.c.y, lpt.cw);
         int next_pt_id = -1;
@@ -1622,16 +1630,22 @@ bool CPocket::ConvertSketchesToOVD(
         //dprintf("last_pt_id:%i\n", last_pt_id);
         //dprintf("next_pt_id:%i\n", next_pt_id);
         last_pt_id = next_pt_id;
-
+        //dprintf("pt:id:%d,p:(%g,%g)\n", last_pt_id, lpt.p.x, lpt.p.y);
       }
+      ++show_progress;
     }
+    //printf("last_pt_id: %d\n", last_pt_id);
   }
 
   dprintf("adding lines to voronoi diagram...\n");
-  BOOST_FOREACH( SegID seg_id, seg_ids ) { // loop through each loop
-      //dprintf("seg_id:%i,%i\n", seg_id.first, seg_id.second);
-      bool success = vd.insert_line_site(seg_id.first, seg_id.second);
-      //dprintf("success:%i\n", success);
+  {
+    boost::progress_display show_progress(seg_ids.size());
+    BOOST_FOREACH( SegID seg_id, seg_ids ) { // loop through each loop
+        //dprintf("seg_id:%i,%i\n", seg_id.first, seg_id.second);
+        bool success = vd.insert_line_site(seg_id.first, seg_id.second);
+        //dprintf("success:%i\n", success);
+        ++show_progress;
+    }
   }
 
   // Pocket the area

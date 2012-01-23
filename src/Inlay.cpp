@@ -333,14 +333,22 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       //ovd::Point p4(-0.6,0.3);
 	  std::list<HeeksObj *> children(GetChildren());
       TranslateScale ts;
+      dprintf("ConvertSketchesToOVD() ...\n");
       bool result = CPocket::ConvertSketchesToOVD(children, vd, ts, pMachineState);
+      dprintf("... ConvertSketchesToOVD() done.\n");
 
+      dprintf("vd.get_graph_reference() ...\n");
       ovd::HEGraph& g = vd.get_graph_reference();
-      ovd::PolygonInterior pi(g);
+      dprintf("PolygonInterior() ...\n");
+      ovd::PolygonInterior pi(g, true);
+      dprintf("MedialAxis() ...\n");
       ovd::MedialAxis ma(g);
+      dprintf("MedialAxisWalk() ...\n");
       ovd::MedialAxisWalk maw(g);
+      dprintf("walk() ...\n");
       ovd::ChainList toolpath = maw.walk();
       double p[3];
+      dprintf("converting maw to toolpath) ...\n");
       python << _T("comment(") << PythonString(_("medial axis walk")) << _T(")\n");
       {
         // Up to clearance height.
@@ -362,19 +370,34 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
             p[2] = -pt_dist.clearance_radius;
             if (n == 0) {
               {
-                // Up to clearance height.
+                // Rapid up to clearance height.
                 CNCPoint temp(pMachineState->Location());
                 temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
                 python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
                 pMachineState->Location(temp);
               }
               {
+                // Rapid travel to next plunge location.
                 CNCPoint temp(pMachineState->Fixture().Adjustment(p));
                 temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
                 python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
                 pMachineState->Location(temp);
               }
+              //{
+              //  // Rapid plunge to plunge depth.
+              //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+              //  temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+              //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+              //  pMachineState->Location(temp);
+              //}
+              //{
+              //  // Feed from plunge depth to full depth.
+              //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+              //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+              //  pMachineState->Location(temp);
+              //}
               {
+                // For now, rapid plunge to full depth.
                 CNCPoint temp(pMachineState->Fixture().Adjustment(p));
                 python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
                 pMachineState->Location(temp);
@@ -413,7 +436,7 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
     CPocket::DetailArea(area);
     dprintf("... DetailArea(area) done.\n");
 
-    return python;
+    //return python;
 
     /* Demonstration: round corners to radius of 1.5. */
     if(false){
@@ -457,7 +480,7 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
     if(true){
 	  dprintf("building CAreaPocketParams() ...\n");
       //double tool_radius = CTool::Find(m_tool_number)->CuttingRadius();
-      double tool_radius = 1.5;
+      double tool_radius = 1.;
       double extra_offset = 0.;
       //double stepover = tool_radius;
       double stepover = 1.;
@@ -532,7 +555,7 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       for(std::list<CCurve>::iterator c = toolpath.begin(); c != toolpath.end(); c++){
         curve_num++;
         dprintf("(curve %d/%d) converting curve ...\n", curve_num, num_curves);
-        z = c->m_recur_depth;
+        z = -c->m_recur_depth - 1;
         c->RemoveTinySpans();
         dprintf("c->m_recur_depth: %d\n", c->m_recur_depth);
         HeeksObj *sketch = heeksCAD->NewSketch();
