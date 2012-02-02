@@ -41,6 +41,7 @@
 #include <sstream>
 #include <utility> /* for std::pair */
 #include <map>
+#include <cmath>
 
 extern CHeeksCADInterface* heeksCAD;
 
@@ -1256,9 +1257,6 @@ bool CPocket::ConvertSketchesToArea(
   return did_generate_pocket;
 }
 
-typedef std::pair<int, int> SegID;
-typedef std::vector<SegID> SegIDs;
-
 struct PtIDs {
     typedef std::map<double, int> IDMap;
     typedef IDMap::iterator IDMapIter;
@@ -1278,6 +1276,65 @@ struct PtIDs {
     }
 };
 
+typedef std::pair<int, int> SegID;
+typedef std::vector<SegID> SegIDs;
+typedef std::pair<ovd::Point, ovd::Point> Seg;
+typedef std::vector<Seg> Segs;
+
+bool intersects(Seg &s1, Seg &s2) {
+  ovd::Point p1 = s1.first;
+  ovd::Point p2 = s1.second;
+  ovd::Point p = p1;
+  ovd::Point r = p2-p1;
+  ovd::Point q1 = s2.first;
+  ovd::Point q2 = s2.second;
+  ovd::Point q = q1;
+  ovd::Point s = q2-q1;
+  // t = (q-p) cross (s) / (r cross s)
+  // u = (q-p) cross (r) / (r cross s)
+  if ( r.cross(s) == 0 ) { //parallel lines
+    if ( (q-p).cross(r) == 0 ) //collinear
+      return true;
+    else
+      return false; // parallel lines that never intersect
+  }
+  double t = (q-p).cross(s) / (r.cross(s));
+  double u = (q-p).cross(r) / (r.cross(s));
+  if ( (0.0<=t) && (t<=1.0) && (0.0<=u) && (u<=1.0) )
+    return true;
+  return false;
+}
+
+bool joins(Seg &s1, Seg &s2) {
+  if (s1.first == s2.first) return true;
+  if (s1.first == s2.second) return true;
+  if (s1.second == s2.first) return true;
+  if (s1.second == s2.second) return true;
+  return false;
+}
+
+// test if s intersects with any of the segments in segs
+// return true if there is an intersection, otherwise false
+bool segment_intersects(Segs& segs, Seg& s, Seg &os) {
+  BOOST_FOREACH(Seg& seg, segs) {
+    if (intersects(seg,s)) {
+      if (!joins(seg, s)) {
+        dprintf("intersection: s: (%g,%g)-(%g,%g) ...\n", s.first.x, s.first.y, s.second.x, s.second.y);
+        dprintf("intersection: seg: (%g,%g)-(%g,%g) ...\n", seg.first.x, seg.first.y, seg.second.x, seg.second.y);
+        os = seg;
+        return true;
+      }
+    }
+  }
+  return false; // no intersections found
+}
+
+
+void TranslateScale::set_bits(int _bits) {
+    bits = _bits;
+    bits_power = pow((double)2., (double)bits);
+    inv_bits_power = 1./bits_power;
+}
 void TranslateScale::set(ovd::Point &p) {
     min_x = max_x = p.x;
     min_y = max_y = p.y;
@@ -1338,6 +1395,18 @@ void TranslateScale::inv_scale_translate(ovd::Point &p) {
     inv_scale(p);
     inv_translate(p);
 }
+void TranslateScale::round(double &d) {
+    int exponent;
+    double significand = frexp(d, &exponent);
+    significand = int(significand*bits_power)*inv_bits_power;
+    d = ldexp(significand, exponent);
+}
+void TranslateScale::round(ovd::Point &p) {
+    if(0.<bits){
+        round(p.x);
+        round(p.y);
+    }
+}
 
 bool CPocket::ConvertSketchesToOVD(
   std::list<HeeksObj *> &sketches,
@@ -1348,18 +1417,17 @@ bool CPocket::ConvertSketchesToOVD(
 {
   dprintf("entered ...\n");
   dprintf("vd far radius: %g ...\n", vd.get_far_radius());
-  int num_curves = 0;
-
   PtIDs pt_ids;
-  ovd::OffsetList loops;
+  ovd::OffsetLoops loops;
 
   int num_children = sketches.size();
   int child_num = 0;
   dprintf("iterating through %d children to generate pockets ...\n", num_children);
-  for (std::list<HeeksObj *>::iterator it = sketches.begin(); it != sketches.end(); it++)
-  {
+  for (std::list<HeeksObj *>::iterator it = sketches.begin(); it != sketches.end(); it++) {
     HeeksObj* object = *it;
     child_num++;
+
+    // Find and skip things we can't process...
     dprintf("(child_num %d/%d) considering object ...\n", child_num, num_children);
     if (object->GetType() != SketchType) {
       dprintf("(child_num %d/%d) skipping non-sketch object ...\n", child_num, num_children);
@@ -1378,12 +1446,7 @@ bool CPocket::ConvertSketchesToOVD(
     HeeksObj* re_ordered_sketch = NULL;
     SketchOrderType order = heeksCAD->GetSketchOrder(object);
     dprintf("(child_num %d/%d) considering whether to reorder ...\n", child_num, num_children);
-    if(
-      (order != SketchOrderTypeCloseCW) &&
-      (order != SketchOrderTypeCloseCCW) &&
-      (order != SketchOrderTypeMultipleCurves) &&
-      (order != SketchOrderHasCircles))
-    {
+    if((order != SketchOrderTypeCloseCW) && (order != SketchOrderTypeCloseCCW) && (order != SketchOrderTypeMultipleCurves) && (order != SketchOrderHasCircles)) {
       dprintf("(child_num %d/%d) reordering ...\n", child_num, num_children);
       re_ordered_sketch = object->MakeACopy();
       dprintf("(child_num %d/%d) ReOrderSketch(...) ...\n", child_num, num_children);
@@ -1391,316 +1454,255 @@ bool CPocket::ConvertSketchesToOVD(
       object = re_ordered_sketch;
       dprintf("(child_num %d/%d) GetSketchOrder(...) (again) ...\n", child_num, num_children);
       order = heeksCAD->GetSketchOrder(object);
-      if(
-        (order != SketchOrderTypeCloseCW) &&
-        (order != SketchOrderTypeCloseCCW) &&
-        (order != SketchOrderTypeMultipleCurves) &&
-        (order != SketchOrderHasCircles))
-      {
+      if((order != SketchOrderTypeCloseCW) && (order != SketchOrderTypeCloseCCW) && (order != SketchOrderTypeMultipleCurves) && (order != SketchOrderHasCircles)) {
         switch(heeksCAD->GetSketchOrder(object)) {
-        case SketchOrderTypeOpen: {
-            dprintf("(child_num %d/%d) skipping unclosed sketch ...\n", child_num, num_children);
-            delete re_ordered_sketch;
-            continue;
-          }
+        case SketchOrderTypeOpen:
+          dprintf("(child_num %d/%d) skipping unclosed sketch ...\n", child_num, num_children);
           break;
-
-        default: {
-            dprintf("(child_num %d/%d) skipping badly-ordered sketch ...\n", child_num, num_children);
-            delete re_ordered_sketch;
-            continue;
-          }
+        default:
+          dprintf("(child_num %d/%d) skipping badly-ordered sketch ...\n", child_num, num_children);
           break;
         }
+        delete re_ordered_sketch;
+        continue;
       }
     }
-
     if(object == NULL) {
       dprintf("(child_num %d/%d) skipping null object generated during reordering ...\n", child_num, num_children);
-    } else {
-      dprintf("(child_num %d/%d) converting to libAREA format ...\n", child_num, num_children);
-      ovd::Loop loop;
-      bool started = false;
-      double prev_e[3];
-
-      // Extract sketch elements for analysis.
-      std::list<HeeksObj*> new_spans;
-      for(HeeksObj* span = object->GetFirstChild(); span; span = object->GetNextChild()) {
-        if(span->GetType() == SplineType) {
-            heeksCAD->SplineToBiarcs(span, new_spans, CPocket::max_deviation_for_spline_to_arc);
-        } else { new_spans.push_back(span->MakeACopy()); }
-      }
-      // Analyze each sketch element, and load into area object.
-      for(std::list<HeeksObj*>::iterator It = new_spans.begin(); It != new_spans.end(); It++) {
-        HeeksObj* span_object = *It;
-        double s[3] = {0, 0, 0};
-        double e[3] = {0, 0, 0};
-        double c[3] = {0, 0, 0};
-        
-        if(span_object){
-          int type = span_object->GetType();
-          if(type == LineType || type == ArcType) {
-            span_object->GetStartPoint(s);
-#ifdef STABLE_OPS_ONLY
-            CNCPoint start(s);
-#else
-            CNCPoint start(pMachineState->Fixture().Adjustment(s));
-#endif
-            if(started && (fabs(s[0] - prev_e[0]) > 0.0001 || fabs(s[1] - prev_e[1]) > 0.0001)) {
-              // Complete the curve, load into area object, and get ready
-              // for next curve.
-              loops.push_back(loop);
-              loop = ovd::Loop();
-              started = false;
-              num_curves++;
-            }
-
-            // Check whether to start a new curve.
-            if(!started) {
-              ovd::Point startpt(start.X(true), start.Y(true));
-              ovd::Lpt lpt(startpt);
-              loop.push_back(lpt);
-              started = true;
-            }
-
-            // Now handle the other end of the edge or arc.
-            span_object->GetEndPoint(e);
-            memcpy(prev_e, e, 3*sizeof(double));
-#ifdef STABLE_OPS_ONLY
-            CNCPoint end(e);
-#else
-            CNCPoint end(pMachineState->Fixture().Adjustment(e));
-#endif
-            if(type == LineType) {
-              loop.push_back(ovd::Lpt(ovd::Point(end.X(true), end.Y(true))));
-            } else if(type == ArcType) {
-              span_object->GetCentrePoint(c);
-#ifdef STABLE_OPS_ONLY
-              CNCPoint centre(c);
-#else
-              CNCPoint centre(pMachineState->Fixture().Adjustment(c));
-#endif
-              double pos[3];
-              heeksCAD->GetArcAxis(span_object, pos);
-              bool cw = (pos[2] >= 0)?(false):(true);
-              loop.push_back( ovd::Lpt( ovd::Point( end.X(true), end.Y(true)), 0., ovd::Point( centre.X(true), centre.Y(true)), cw));
-            }
-            memcpy(prev_e, e, 3*sizeof(double));
-          } else {
-            // Handle circles.
-            if (type == CircleType) {
-              // Since circle is its own entity, any in-progress object should
-              // be completed. XXX: There shouldn't actually be any in-progress
-              // objects; they should have been previously closed. But...
-              if(started) {
-                // Complete the curve, load into pocketing object, and get
-                // ready for next curve.
-                loops.push_back(loop);
-                loop = ovd::Loop();
-                started = false;
-                // FIXME: Since the previous curve wasn't
-                // properly closed, it may cause problems
-                // later.
-              }
-
-              std::list< std::pair<int, gp_Pnt > > points;
-              span_object->GetCentrePoint(c);
-
-              // Setup the four arcs that will make up the circle using UNadjusted
-              // coordinates first so that the offsets align with the X and Y axes.
-              double radius = heeksCAD->CircleGetRadius(span_object);
-
-              points.push_back( std::make_pair(0, gp_Pnt( c[0], c[1] + radius, c[2] )) ); // north
-              points.push_back( std::make_pair(-1, gp_Pnt( c[0] + radius, c[1], c[2] )) ); // east
-              points.push_back( std::make_pair(-1, gp_Pnt( c[0], c[1] - radius, c[2] )) ); // south
-              points.push_back( std::make_pair(-1, gp_Pnt( c[0] - radius, c[1], c[2] )) ); // west
-              points.push_back( std::make_pair(-1, gp_Pnt( c[0], c[1] + radius, c[2] )) ); // north
-
-#ifdef STABLE_OPS_ONLY
-              CNCPoint centre(c);
-#else
-              CNCPoint centre(pMachineState->Fixture().Adjustment(c));
-#endif
-
-              loop = ovd::Loop();
-              for (std::list< std::pair<int, gp_Pnt > >::iterator l_itPoint = points.begin(); l_itPoint != points.end(); l_itPoint++) {
-#ifdef STABLE_OPS_ONLY
-                CNCPoint pnt( l_itPoint->second );
-#else
-                CNCPoint pnt = pMachineState->Fixture().Adjustment( l_itPoint->second );
-#endif
-
-                bool cw = (l_itPoint->first == 1)?(false):(true);
-                loop.push_back( ovd::Lpt( ovd::Point( pnt.X(true), pnt.Y(true)), 0., ovd::Point( centre.X(true), centre.Y(true)), cw));
-              } // End for
-              // Complete the curve, load into pocketing object, and get ready
-              // for next curve.
-              loops.push_back(loop);
-              loop = ovd::Loop();
-              num_curves++;
-            }
-          } // End if - else
-        }
-      }
-
-      // XXX: There shouldn't actually be any in-progress objects; they should
-      // have been previously closed. But...
-      if(started) {
-        // Complete the curve, load into pocketing object, and get ready for
-        // next curve.
-        loops.push_back(loop);
-        loop = ovd::Loop();
-        started = false;
-        num_curves++;
-        // FIXME: Since the previous curve wasn't properly closed,
-        // it may cause problems later.
-      }
-
-      // delete the spans made
-      for(std::list<HeeksObj*>::iterator It = new_spans.begin(); It != new_spans.end(); It++) {
-        HeeksObj* span = *It;
-        delete span;
-      }
-
+      continue;
     }
 
+    dprintf("(child_num %d/%d) yay! we can process this child.\n", child_num, num_children);
+    dprintf("(child_num %d/%d) converting to OpenVoronoi format ...\n", child_num, num_children);
+    ovd::OffsetLoop loop;
+    bool started = false;
+    double prev_e[3];
+
+    // Extract sketch elements for analysis.
+    std::list<HeeksObj*> new_spans;
+    for(HeeksObj* span = object->GetFirstChild(); span; span = object->GetNextChild()) {
+      if(span->GetType() == SplineType) {
+          heeksCAD->SplineToBiarcs(span, new_spans, CPocket::max_deviation_for_spline_to_arc);
+      } else { new_spans.push_back(span->MakeACopy()); }
+    }
+    // Analyze each sketch element.
+    for(std::list<HeeksObj*>::iterator It = new_spans.begin(); It != new_spans.end(); It++) {
+      HeeksObj* span_object = *It;
+      double s[3] = {0, 0, 0};
+      double e[3] = {0, 0, 0};
+      double c[3] = {0, 0, 0};
+      
+      if(span_object){
+        int type = span_object->GetType();
+        
+        if(type == LineType || type == ArcType) {
+          // Handle arcs and lines.
+          span_object->GetStartPoint(s);
+          CNCPoint start(pMachineState->Fixture().Adjustment(s));
+          if(started && (fabs(s[0] - prev_e[0]) > 0.0001 || fabs(s[1] - prev_e[1]) > 0.0001)) {
+            // Complete loop, load into loops list, get ready for next loop.
+            loops.push_back(loop);
+            loop = ovd::OffsetLoop();
+            started = false;
+          }
+
+          // Check whether to start a new loop.
+          if(!started) {
+            ovd::Point startpt(start.X(true), start.Y(true));
+            ovd::OffsetVertex lpt(startpt);
+            loop.push_back(lpt);
+            started = true;
+          }
+
+          // Now handle the other end of the line or arc.
+          span_object->GetEndPoint(e);
+          memcpy(prev_e, e, 3*sizeof(double));
+          CNCPoint end(pMachineState->Fixture().Adjustment(e));
+          if(type == LineType) {
+            // Finish handling line.
+            loop.push_back(ovd::OffsetVertex(ovd::Point(end.X(true), end.Y(true))));
+          } else if(type == ArcType) {
+            // Finish handling arc.
+            span_object->GetCentrePoint(c);
+            CNCPoint centre(pMachineState->Fixture().Adjustment(c));
+            double pos[3];
+            heeksCAD->GetArcAxis(span_object, pos);
+            bool cw = (pos[2] >= 0)?(false):(true);
+            loop.push_back( ovd::OffsetVertex( ovd::Point( end.X(true), end.Y(true)), 0., ovd::Point( centre.X(true), centre.Y(true)), cw));
+          }
+          memcpy(prev_e, e, 3*sizeof(double));
+        } else {
+          // Handle circles.
+          if (type == CircleType) {
+            // Since circle is its own entity, any in-progress object should
+            // be completed. XXX: There shouldn't actually be any in-progress
+            // objects; they should have been previously closed. But...
+            if(started) {
+              // Complete loop, load into loops list, get ready for next loop.
+              loops.push_back(loop);
+              loop = ovd::OffsetLoop();
+              started = false;
+              // FIXME: improperly-closed loop may cause problems later.
+            }
+
+            std::list< std::pair<int, gp_Pnt > > points;
+            span_object->GetCentrePoint(c);
+
+            // Setup the four arcs that will make up the circle using UNadjusted
+            // coordinates first so that the offsets align with the X and Y axes.
+            double radius = heeksCAD->CircleGetRadius(span_object);
+
+            points.push_back( std::make_pair(0, gp_Pnt( c[0], c[1] + radius, c[2] )) ); // north
+            points.push_back( std::make_pair(-1, gp_Pnt( c[0] + radius, c[1], c[2] )) ); // east
+            points.push_back( std::make_pair(-1, gp_Pnt( c[0], c[1] - radius, c[2] )) ); // south
+            points.push_back( std::make_pair(-1, gp_Pnt( c[0] - radius, c[1], c[2] )) ); // west
+            points.push_back( std::make_pair(-1, gp_Pnt( c[0], c[1] + radius, c[2] )) ); // north
+            CNCPoint centre(pMachineState->Fixture().Adjustment(c));
+            loop = ovd::OffsetLoop();
+            for (std::list< std::pair<int, gp_Pnt > >::iterator l_itPoint = points.begin(); l_itPoint != points.end(); l_itPoint++) {
+              CNCPoint pnt = pMachineState->Fixture().Adjustment( l_itPoint->second );
+              bool cw = (l_itPoint->first == 1)?(false):(true);
+              loop.push_back( ovd::OffsetVertex( ovd::Point( pnt.X(true), pnt.Y(true)), 0., ovd::Point( centre.X(true), centre.Y(true)), cw));
+            }
+            // Complete loop, load into loops list, get ready for next loop.
+            loops.push_back(loop);
+            loop = ovd::OffsetLoop();
+          }
+        }
+      }
+    }
+
+    // XXX: There shouldn't actually be any in-progress objects; they should
+    // have been previously closed. But...
+    if(started) {
+      // Complete loop, load into loops list, get ready for next loop.
+      loops.push_back(loop);
+      loop = ovd::OffsetLoop();
+      started = false;
+      // FIXME: improperly-closed loop may cause problems later.
+    }
+    // delete the spans made
+    for(std::list<HeeksObj*>::iterator It = new_spans.begin(); It != new_spans.end(); It++) {
+      HeeksObj* span = *It;
+      delete span;
+    }
+    
     if(re_ordered_sketch) { delete re_ordered_sketch; }
     dprintf("(child_num %d/%d) ... done considering this child.\n", child_num, num_children);
+  }
 
-  } // End for
-
-
-  dprintf("finding boundaries ...\n");
+  // Find boundary containing all analyzed elements, and use this info to scale
+  // and translate all elements into a region that OpenVoronoi can handle.
+  dprintf("finding outer boundary containing all analyzed elements ...\n");
   bool first_ever = true;
-  BOOST_FOREACH( ovd::Loop lp, loops ) { // loop through each loop
-    bool first = true;
-    BOOST_FOREACH( ovd::Lpt lpt, lp ) { // loop through each line/arc
+  BOOST_FOREACH( ovd::OffsetLoop lp, loops ) { // loop through each loop
+    BOOST_FOREACH( ovd::OffsetVertex lpt, lp ) { // loop through each line/arc
       if (first_ever){
         first_ever = false;
         ts.set(lpt.p);
-      } else {
-        ts.update(lpt.p);
-      }
-      if (first) {
-        first = false;
-        //dprintf("first pt:p:(%g,%g)\n", lpt.p.x, lpt.p.y);
-      } else {
-        //dprintf("pt:p:(%g,%g),r:(%g),c:(%g,%g),cw:%i\n", lpt.p.x, lpt.p.y, lpt.r, lpt.c.x, lpt.c.y, lpt.cw);
-      }
-    }
-  }
+      } else { ts.update(lpt.p); }
+  } }
   ts.set_translate_scale_fixed_aspect();
-  dprintf("ts:min:(%g,%g),max:(%g,%g),d:(%g,%g),c:(%g,%g),s:(%g,%g)\n", ts.min_x, ts.min_y, ts.max_x, ts.max_y, ts.d_x, ts.d_y, ts.c_x, ts.c_y, ts.s_x, ts.s_y);
+  //ts.set_bits(30);;
+  dprintf("boundaries: min:(%g,%g),max:(%g,%g),d:(%g,%g),c:(%g,%g),s:(%g,%g)\n", ts.min_x, ts.min_y, ts.max_x, ts.max_y, ts.d_x, ts.d_y, ts.c_x, ts.c_y, ts.s_x, ts.s_y);
 
-  dprintf("adding points to voronoi diagram...\n");
+  // Load each analyzed element into the OpenVoronoi diagram. First load all
+  // points, and then load all lines.
+  dprintf("adding points to voronoi diagram ..\n");
+  Segs segs;
   SegIDs seg_ids;
   int num_loops = loops.size();
   int loop_num = 0;
-  BOOST_FOREACH( ovd::Loop lp, loops ) { // loop through each loop
+  bool first = true;
+  ovd::Point last_pt;
+  int last_pt_id = -1;
+  int next_pt_id = -1;
+  Seg seg, interseg;
+  SegID seg_id;
+  BOOST_FOREACH( ovd::OffsetLoop lp, loops ) { // loop through each loop
     loop_num++;
-    bool first = true;
-    int last_pt_id = -1;
+    first = true;
     dprintf("adding points for loop %d/%d ...\n", loop_num, num_loops);
     boost::progress_display show_progress(lp.size());
-    BOOST_FOREACH( ovd::Lpt lpt, lp ) { // loop through each line/arc
+    BOOST_FOREACH( ovd::OffsetVertex lpt, lp ) { // loop through each line/arc
       ts.translate_scale(lpt.p);
+      ts.round(lpt.p);
       if (first) {
         first = false;
-        //dprintf("first pt:p:(%g,%g)\n", lpt.p.x, lpt.p.y);
-        if (pt_ids.find(lpt.p.x, lpt.p.y, last_pt_id)){
-            //dprintf("first point site already seen as id %i!\n", last_pt_id);
-        } else {
-            //dprintf("inserting first new point site ...\n");
-            last_pt_id = vd.insert_point_site(lpt.p);
-            pt_ids.add(lpt.p.x, lpt.p.y, last_pt_id);
+        if (!pt_ids.find(lpt.p.x, lpt.p.y, last_pt_id)){
+          last_pt = lpt.p;
+          last_pt_id = vd.insert_point_site(lpt.p);
+          //std::cout << "# id: " << last_pt_id << std::endl;
+          //std::streamsize precision = std::cout.precision(15);
+          //std::cout << "vd.addVertexSite(ovd.Point(" << lpt.p.x << "," << lpt.p.y << "))" << std::endl;
+          //std::cout.precision(precision);
+          pt_ids.add(lpt.p.x, lpt.p.y, last_pt_id);
         }
-        //dprintf("last_pt_id:%i\n", last_pt_id);
-        //printf("first pt:id:%d,p:(%g,%g) ... ", last_pt_id, lpt.p.x, lpt.p.y);
       } else {
-        //dprintf("pt:p:(%g,%g),r:(%g),c:(%g,%g),cw:%i\n", lpt.p.x, lpt.p.y, lpt.r, lpt.c.x, lpt.c.y, lpt.cw);
-        int next_pt_id = -1;
         if (pt_ids.find(lpt.p.x, lpt.p.y, next_pt_id)){
-            //dprintf("point site already seen as id %i!\n", next_pt_id);
+          dprintf("WARNING: duplicate point found: (%g,%g) (id:%d)...\n", lpt.p.x, lpt.p.y, next_pt_id);
         } else {
-            //dprintf("inserting new point site ...\n");
-            next_pt_id = vd.insert_point_site(lpt.p);
-            pt_ids.add(lpt.p.x, lpt.p.y, next_pt_id);
+          next_pt_id = vd.insert_point_site(lpt.p);
+          //std::cout << "# id: " << next_pt_id << std::endl;
+          //std::streamsize precision = std::cout.precision(15);
+          //std::cout << "vd.addVertexSite(ovd.Point(" << lpt.p.x << "," << lpt.p.y << "))" << std::endl;
+          //std::cout.precision(precision);
+          pt_ids.add(lpt.p.x, lpt.p.y, next_pt_id);
         }
-        seg_ids.push_back(SegID(last_pt_id, next_pt_id));
-        //dprintf("last_pt_id:%i\n", last_pt_id);
-        //dprintf("next_pt_id:%i\n", next_pt_id);
-        last_pt_id = next_pt_id;
-        //dprintf("pt:id:%d,p:(%g,%g)\n", last_pt_id, lpt.p.x, lpt.p.y);
+        bool segment_fails = false;
+        if (segment_intersects(segs, seg, interseg)){
+          dprintf("WARNING: segment intersection found ...\n");
+          int interseg_first_id, interseg_second_id;
+          if (!pt_ids.find(interseg.first.x, interseg.first.y, interseg_first_id)){
+            dprintf("   can't find intersecting segment's first point's id: (%g,%g) ...\n", interseg.first.x, interseg.first.y);
+            segment_fails = true;
+          }
+          if (!pt_ids.find(interseg.second.x, interseg.second.y, interseg_second_id)){
+            dprintf("   can't find intersecting segment's second point's id: (%g,%g) ...\n", interseg.second.x, interseg.second.y);
+            segment_fails = true;
+          }
+          if (!segment_fails){
+            dprintf("   new segment: (%g,%g)-(%g,%g) (ids:%d-%d)...\n", last_pt.x, last_pt.y, lpt.p.x, lpt.p.y, last_pt_id, next_pt_id);
+            dprintf("   previous segment: (%g,%g)-(%g,%g) (ids:%d-%d)...\n", interseg.first.x, interseg.first.y, interseg.second.x, interseg.second.y, interseg_first_id, interseg_second_id);
+            segment_fails = true;
+          }
+        }
+        if (!segment_fails) {
+          //std::cout << "# seg_id: " << seg_id.first << ", " << seg_id.second << std::endl;
+          //std::cout << "plt.plot((" << last_pt.x << ", " << lpt.p.x << "), (" << last_pt.y << ", " << lpt.p.y << "))" << std::endl;
+          //printf("# seg_id: %d, %d\n", seg_id.first, seg_id.second);
+          //printf("plt.plot((%g,%g),(%g,%g))\n", last_pt.x, lpt.p.x, last_pt.y, lpt.p.y);
+          //dprintf("... adding new segment: (%g,%g)-(%g,%g) (ids:%d-%d)...\n", last_pt.x, last_pt.y, lpt.p.x, lpt.p.y, last_pt_id, next_pt_id);
+          seg.first = last_pt;
+          seg.second = lpt.p;
+
+          seg_id.first = last_pt_id;
+          seg_id.second = next_pt_id;
+
+          segs.push_back(seg);
+          seg_ids.push_back(seg_id);
+
+          last_pt = lpt.p;
+          last_pt_id = next_pt_id;
+          //dprintf("... updated last_pt: (%g,%g), last_pt_id:%d ...\n", last_pt.x, last_pt.y, last_pt_id);
+        } else {
+          dprintf("WARNING: the new segment was not added: (%g,%g)-(%g,%g) (ids:%d-%d)...\n", last_pt.x, last_pt.y, lpt.p.x, lpt.p.y, last_pt_id, next_pt_id);
+        }
       }
       ++show_progress;
-    }
-    //printf("last_pt_id: %d\n", last_pt_id);
-  }
-
-  dprintf("adding lines to voronoi diagram...\n");
+  } }
+  dprintf("adding lines to voronoi diagram ...\n");
   {
     boost::progress_display show_progress(seg_ids.size());
     BOOST_FOREACH( SegID seg_id, seg_ids ) { // loop through each loop
-        //dprintf("seg_id:%i,%i\n", seg_id.first, seg_id.second);
+        //dprintf("inserting line site %i-%i ...\n", seg_id.first, seg_id.second);
         bool success = vd.insert_line_site(seg_id.first, seg_id.second);
-        //dprintf("success:%i\n", success);
+        if(!success) dprintf("... failed to insert line site %i-%i.\n", seg_id.first, seg_id.second);
         ++show_progress;
-    }
-  }
-
-  // Pocket the area
-  double did_generate_pocket = false;
-  if (0 < num_curves) {
-    // Reorder the area. The outside curves must be made anti-clockwise and
-    // the insides clockwise.
-    dprintf("generating pocket toolpath ...\n");
-    /*XXX*/// area.Reorder();
-    // std::list<CCurve> curve_list;
-    // //double tool_radius = CTool::Find( m_params.m_clearance_tool)->CuttingRadius();
-    // //double extra_offset = 0.;
-    // //double stepover = tool_radius;
-	// CAreaPocketParams params(
-    //   tool_radius,
-    //   extra_offset,
-    //   stepover, from_center, use_zig_zag ? ZigZagPocketMode : SpiralPocketMode, zig_angle);
-    // area.MakePocketToolpath(curve_list, tool_radius, extra_offset, stepover);
-    // did_generate_pocket = true;
-    //python << _T("a.Reorder()\n");
-
-    // start - assume we are at a suitable clearance height
-
-    // make a parameter of area_funcs.pocket() eventually
-    // 0..plunge, 1..ramp, 2..helical
-    //python << _T("entry_style = ") <<  m_pocket_params.m_entry_move << _T("\n");
-    //python << _T("area_funcs.pocket(a, tool_diameter/2, ");
-    //python << m_pocket_params.m_material_allowance / theApp.m_program->m_units;
-    //python << _T(", rapid_safety_space, start_depth, final_depth, ");
-    //python << m_pocket_params.m_step_over / theApp.m_program->m_units;
-    //python << _T(", step_down, clearance, ");
-    //python << m_pocket_params.m_starting_place;
-    //python << (m_pocket_params.m_keep_tool_down_if_poss ? _T(", True") : _T(", False"));
-    //python << (m_pocket_params.m_use_zig_zag ? _T(", True") : _T(", False"));
-    //python << _T(", ") << m_pocket_params.m_zig_angle;
-    //python << _T(",") << (m_pocket_params.m_zig_unidirectional ? _T("True") : _T("False"));
-    //python << _T(")\n");
-  } else {
-    dprintf("the area contains no curves, so a pocket toolpath cannot be generated ...\n");
-    did_generate_pocket = false;
-    //python << _T("\n");
-    //python << _T("comment('In the python code that generated this gcode,')\n");
-    //python << _T("comment('an area was created that lacks sufficient curves')\n");
-    //python << _T("comment('to successfully call the pocketing function,')\n");
-    //python << _T("comment('wherefore I refuse cowardly to even try')\n");
-    //python << _T("comment('because I think I might crash if I do.')\n");
-    //python << _T("\n");
-  }
-
-  // rapid back up to clearance plane
-  //python << _T("rapid(z = clearance)\n");
+  } }
 
   dprintf("... done.\n");
-  //return(python);
-  return did_generate_pocket;
+  return true;
 }
 
 void CPocket::DetailSpan(const Span &span)

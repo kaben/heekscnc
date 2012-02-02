@@ -35,12 +35,17 @@
 #include "Curve.h"
 
 /* OpenVoronoi headers. */
-#include "openvoronoi/voronoidiagram.hpp"
-#include "openvoronoi/polygon_interior.hpp"
-#include "openvoronoi/medial_axis.hpp"
+#include "openvoronoi/island_filter.hpp"
+#include "openvoronoi/medial_axis_edge_walk.hpp"
 #include "openvoronoi/offset.hpp"
+#include "openvoronoi/offset2.hpp"
+#include "openvoronoi/polygon_interior.hpp"
+#include "openvoronoi/version.hpp"
+#include "openvoronoi/voronoidiagram.hpp"
 
 #include "interface/TestMacros.h"
+#include <boost/progress.hpp>
+
 
 #include <sstream>
 #include <iomanip>
@@ -71,21 +76,28 @@ void CInlayParams::set_initial_values()
 {
 	CNCConfig config(ConfigPrefix());
 	config.Read(_T("BorderWidth"), (double *) &m_border_width, 0.0);
+	config.Read(_T("MinCorneringAngle"), (double *) &m_min_cornering_angle, 135.0);
 	config.Read(_T("ClearanceTool"), &m_clearance_tool, 0);
 	config.Read(_T("Pass"), (int *) &m_pass, (int) eBoth );
 	config.Read(_T("MirrorAxis"), (int *) &m_mirror_axis, (int) eXAxis );
-	config.Read(_T("MinCorneringAngle"), (double *) &m_min_cornering_angle, 135.0);
 
+	config.Read(_T("InlayPlaneDepth"), (double *) &m_inlay_plane_depth, 0.5);
+	config.Read(_T("PeakClearance"), (double *) &m_peak_clearance, 0.5);
+	config.Read(_T("TroughClearance"), (double *) &m_trough_clearance, 0.5);
 }
 
 void CInlayParams::write_values_to_config()
 {
 	CNCConfig config(ConfigPrefix());
 	config.Write(_T("BorderWidth"), m_border_width);
+	config.Write(_T("MinCorneringAngle"), m_min_cornering_angle);
 	config.Write(_T("ClearanceTool"), m_clearance_tool);
 	config.Write(_T("Pass"), (int) m_pass );
 	config.Write(_T("MirrorAxis"), (int) m_mirror_axis );
-	config.Write(_T("MinCorneringAngle"), m_min_cornering_angle);
+
+	config.Read(_T("InlayPlaneDepth"), (double *) &m_inlay_plane_depth);
+	config.Read(_T("PeakClearance"), (double *) &m_peak_clearance);
+	config.Read(_T("TroughClearance"), (double *) &m_trough_clearance);
 }
 
 static void on_set_border_width(double value, HeeksObj* object)
@@ -158,10 +170,30 @@ static void on_set_male_fixture(int value, HeeksObj* object)
 	heeksCAD->Changed();
 }
 
+static void on_set_inlay_plane_depth(double value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_inlay_plane_depth = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
+static void on_set_peak_clearance(double value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_peak_clearance = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
+static void on_set_trough_clearance(double value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_trough_clearance = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
 
 void CInlayParams::GetProperties(CInlay* parent, std::list<Property *> *list)
 {
     list->push_back(new PropertyLength(_("Border Width"), m_border_width, parent, on_set_border_width));
+
+	list->push_back(new PropertyDouble(_("Min Cornering Angle (degrees)"), m_min_cornering_angle, parent, on_set_min_cornering_angle));
 
     {
 		std::vector< std::pair< int, wxString > > tools = CTool::FindAllTools();
@@ -235,7 +267,9 @@ void CInlayParams::GetProperties(CInlay* parent, std::list<Property *> *list)
 		}
 	}
 
-	list->push_back(new PropertyDouble(_("Min Cornering Angle (degrees)"), m_min_cornering_angle, parent, on_set_min_cornering_angle));
+	list->push_back(new PropertyDouble(_("Inlay Plane Depth"), m_inlay_plane_depth, parent, on_set_inlay_plane_depth));
+	list->push_back(new PropertyDouble(_("Peak Clearance"), m_peak_clearance, parent, on_set_peak_clearance));
+	list->push_back(new PropertyDouble(_("Trough Clearance"), m_trough_clearance, parent, on_set_trough_clearance));
 }
 
 void CInlayParams::WriteXMLAttributes(TiXmlNode *root)
@@ -245,16 +279,17 @@ void CInlayParams::WriteXMLAttributes(TiXmlNode *root)
 	heeksCAD->LinkXMLEndChild( root,  element );
 
 	element->SetAttribute( "border", m_border_width);
+	element->SetAttribute( "min_cornering_angle", m_min_cornering_angle);
 	element->SetAttribute( "clearance_tool", m_clearance_tool);
 	element->SetAttribute( "pass", (int) m_pass);
 	element->SetAttribute( "mirror_axis", (int) m_mirror_axis);
 	element->SetAttribute( "female_before_male_fixtures", (int) (m_female_before_male_fixtures?1:0));
-	element->SetAttribute( "min_cornering_angle", m_min_cornering_angle);
 }
 
 void CInlayParams::ReadParametersFromXMLElement(TiXmlElement* pElem)
 {
 	pElem->Attribute("border", &m_border_width);
+	if (pElem->Attribute("min_cornering_angle")) pElem->Attribute("min_cornering_angle", &m_min_cornering_angle);
 	pElem->Attribute("clearance_tool", &m_clearance_tool);
 	pElem->Attribute("pass", (int *) &m_pass);
 	pElem->Attribute("mirror_axis", (int *) &m_mirror_axis);
@@ -263,7 +298,10 @@ void CInlayParams::ReadParametersFromXMLElement(TiXmlElement* pElem)
 	pElem->Attribute("female_before_male_fixtures", (int *) &temp);
 	m_female_before_male_fixtures = (temp != 0);
 
-	if (pElem->Attribute("min_cornering_angle")) pElem->Attribute("min_cornering_angle", &m_min_cornering_angle);
+	if (pElem->Attribute("inlay_plane_depth")) pElem->Attribute("inlay_plane_depth", &m_inlay_plane_depth);
+	if (pElem->Attribute("peak_clearance")) pElem->Attribute("peak_clearance", &m_peak_clearance);
+	if (pElem->Attribute("trough_clearance")) pElem->Attribute("trough_clearance", &m_trough_clearance);
+
 }
 
 
@@ -274,6 +312,48 @@ const wxBitmap &CInlay::GetIcon()
 	static wxBitmap* icon = NULL;
 	if(icon == NULL)icon = new wxBitmap(wxImage(theApp.GetResFolder() + _T("/icons/drilling.png")));
 	return *icon;
+}
+
+Python rapid_up_to_clearance(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+    Python python;
+    // Up to clearance height.
+    CNCPoint temp(machine_state->Location());
+    temp.SetZ(inlay->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+    python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+    machine_state->Location(temp);
+    return python;
+}
+
+Python rapid_up_to_clearance(CMachineState *machine_state, CInlay *inlay) {
+    double p[3] = {0., 0., 0.};
+    return rapid_up_to_clearance(machine_state, inlay, p);
+}
+
+Python rapid_travel_to_next_plunge(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+    Python python;
+    // Rapid travel to next plunge location.
+    CNCPoint temp(machine_state->Fixture().Adjustment(p));
+    temp.SetZ(inlay->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+    python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+    machine_state->Location(temp);
+    return python;
+}
+
+Python rapid_plunge_to_full_depth(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+    Python python;
+    // Rapid travel to next plunge location.
+    CNCPoint temp(machine_state->Fixture().Adjustment(p));
+    python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+    machine_state->Location(temp);
+    return python;
+}
+
+Python feed_to(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+    Python python;
+    CNCPoint cnc_pt(machine_state->Fixture().Adjustment(p));
+    python << _T("feed(x=") << cnc_pt.X(true) << _T(", y=") << cnc_pt.Y(true) << _T(", z=") << cnc_pt.Z(true) << _T(")\n");
+    machine_state->Location(cnc_pt);
+    return python;
 }
 
 
@@ -321,10 +401,183 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 
 	python << CDepthOp::AppendTextToProgram( pMachineState );
 
+    // Sanity checks:
+    // - Depths:
+    //   - Verify: start_depth is above inlay_plane_depth.
+    //   - Verify: final_depth is below inlay_plane_depth.
+    //   - Verify: chamfering_step_down <= chamfering cutting_edge_height.
+    //   - Define: chamfering_step_over := tan(theta)*chamfering_step_down.
+    //   - Verify: chamfering_step_over < (chamfering diameter/2.) - chamfering flat_radius
+    //   - Verify: clearing_step_down <= clearing cutting_edge_height.
+    //   - Verify: clearing_step_over < clearing flat_radius (== clearing diameter/2.).
+    // - Tools:
+    //   - Verify: corner_radius == 0: this implementation of Inlay cannot
+    //     yet handle ball- or bull-nose milling bits; for now it will only
+    //     work for bits with corner radius of zero (i.e., endmills and
+    //     chamfering bits).
+
+    // Ideally, the chamfering bit has a sharp-pointed end, i.e., has flat
+    // radius of zero. If it lacks a center point, i.e., has a positive flat
+    // radius, we need to round the corners of sketches accordingly.
+	CTool *chamfering_bit = CTool::Find(m_tool_number);
+	if (! chamfering_bit) {
+        // Error and exit. Use message box.
+		printf("No chamfering bit defined\n");
+		return(python);
+	}
+	CTool *clearance_bit = CTool::Find(m_params.m_clearance_tool);
+	if (! clearance_bit) {
+        // Error and exit. Use message box.
+		printf("No clearance bit defined\n");
+		return(python);
+	}
+	std::list<HeeksObj *> sketches(GetChildren());
+    double flat_radius = chamfering_bit->m_params.m_flat_radius;
+    double cutting_edge_angle = chamfering_bit->m_params.m_cutting_edge_angle;
+    double chamfering_step_down = chamfering_bit->m_params.m_cutting_edge_height;
+    double start_depth = m_depth_op_params.m_start_depth;
+    double final_depth = m_depth_op_params.m_final_depth;
+    double delta_depth = (final_depth - start_depth); // negative since final_depth < start_depth
+    double step_down = m_depth_op_params.m_step_down;
+    double rapid_safety_space = m_depth_op_params.m_rapid_safety_space;
+    double clearance_height = m_depth_op_params.ClearanceHeight();
+    double tan_theta;
+    double cot_theta;
+
+    if (0. < flat_radius){
+        // RoundCorners(sketches, pMachineState);
+        // - Convert sketches to CArea object.
+        // - Outset, Inset, Outset
+        // - Convert area to sketches.
+    }
+
+    if (0. == cutting_edge_angle){
+        // For now: error and exit. Use message box.
+
+        // Eventually, standard pocketing operations. For now, only handle
+        // positive cutting_edge_angle, i.e., chamfering bits.
+    } else {
+        tan_theta = tan(cutting_edge_angle * 3.141592653589793 / 180.);
+        cot_theta = 1./tan_theta;
+        // Inlay operations.
+        // - Compute female and male versions of the following.
+        //   - Whether to perform for male, female, or both depends on "pass".
+        // - For female:
+        //   - depth array:
+        //     - size n of array = quotient of (start_depth -
+        //       final_depth)/chamfering_step_down.
+        //     - depth[i] should be (start_depth - i*chamfering_step_down).
+        //     - if remainder of (start_depth -
+        //       final_depth)/chamfering_step_down is positive, set depth[n] =
+        //       final_depth, and increment n.
+        //   - wall_offset array:
+        //     - same size as depth array.
+        //     - wall_offset[i] should be chamfering_flat_radius + tan(theta) *
+        //       (inlay_plane_depth - depth[i]).
+        //   - Wall milling skips depth[0] and wall_offset[0]; it starts at depth[1]
+        //     and wall_offset[1].
+        //   - Pocket offset array:
+        //     - same size as depth array.
+        //     - pocket_offset[i] should be pocketing_flat_radius + tan(theta)
+        //       * (inlay_plane_depth - depth[i]).
+        //   - Pocket milling skips depth[0] and pocket_offset[0]; it starts at
+        //     depth[1] and pocket_offset[1].
+        // - For male:
+        //   - depth array: identical to that computed for female.
+        //   - wall_offset array:
+        //     - same size as depth array.
+        //     - wall_offset[i] should be chamfering_flat_radius + tan(theta) *
+        //       (tolerance_depth + inlay_plane_depth - depth[i]).
+        //   - Wall milling skips depth[0] and wall_offset[0]; it starts at depth[1]
+        //     and wall_offset[1].
+        //   - Pocket offset array:
+        //     - same size as depth array.
+        //     - pocket_offset[i] should be pocketing_flat_radius + tan(theta)
+        //       * (tolerance_depth + inlay_plane_depth - depth[i]).
+        //   - Pocket milling skips depth[0] and pocket_offset[0]; it starts at
+        //     depth[1] and pocket_offset[1].
+        // - Wall operations.
+        //   - First wall area is offset such that conical cuts touch the
+        //     (possibly rounded) sketch at inlay_plane_depth, with the
+        //     exception of rounded corners that will be sharpened in the
+        //     medial-axis walk.
+        //   - Iterate through depth and wall_offset arrays, starting at index
+        //     1 (i.e., skipping index 0).
+        //     - The offset path at index 0 will be skipped.
+        //     - The offset path at index i will have depth of depth[i].
+        //     - In OpenVoronoi, each negative offset must be computed using
+        //       the PolygonExterior filter with the absolute value of the
+        //       offset.
+        //     - In OpenVoronoi, each positive offset must be computed using
+        //       the PolygonInterior filter with the absolute value of the
+        //       offset.
+        // - Pocketing operations.
+        //   - Iterate through depth and pocket_offset arrays, starting at
+        //     index 1 (i.e., skipping index 0).
+        //     - The pocket path at index 0 will be skipped.
+        //     - The pocket path at index i will have depth of depth[i].
+        //     - The pocketing path at index i will consist of the slice
+        //       pocket_offset[i:], iterating from last to first in the slice.
+        //     - In OpenVoronoi, each negative offset must be computed using
+        //       the PolygonExterior filter with the absolute value of the
+        //       offset.
+        //     - In OpenVoronoi, each positive offset must be computed using
+        //       the PolygonInterior filter with the absolute value of the
+        //       offset.
+        // - Corner pocketing operations.
+        //   - These regions will be pocketed using the chamfering bit. The tip
+        //     of the bit will reach the end of the trough or peak. The
+        //     effective_radius is computed at tolerance_depth distance from
+        //     the end of the trough or peak.  This should leave small ridges
+        //     in the corner area, whose height equals the tolerance_depth.
+        //   - The effective_radius := chamfering_flat_radius + tan(theta) *
+        //     tolerance_depth.
+        //   - This requires computation of (last_wall_offset) -
+        //     (last_pocket_offset).
+        //   - The final wall-cleared region is the final wall_offset_path,
+        //     inset by the effective_radius.
+        //   - The final pocket-cleared region is the final pocket_offset_path,
+        //     outset by pocketing bit's flat_radius.
+        //   - Subtracting the final pocket-cleared regions from the final
+        //     wall-cleared regions gives the corner-pocket regions.
+        //   - Each corner-pocket region will be pocketed separately.
+        //   - The corner-pocket step_over will not equal the effective_radius!
+        //   - Instead, it will be set to exactly equal the effective_diameter,
+        //     or two times the effective_radius.
+        //   - TODO: provide illustration.
+        // - Medial axis operations.
+        //   - This should computed for wall_offset[0].
+        //   - Each segment should be examined.
+        //     - Depths should be set to start_depth -
+        //     clearance_radius*cot(theta).
+        //     - If either end of the segment has depth above final_depth, it
+        //       should be rendered at least partially.
+        //       - If one end is below final depth, segment should be only
+        //         partially rendered, up to the point on the segment whose
+        //         depth equals final_depth.
+        // - Order female and/or male versions of operations as follows:
+        //   - Whether male or female is first depends on
+        //     "female_before_male_fixtures".
+        //   - 
+    }
+
+    // //double top_plane_depth = m_params
+    dprintf("flat_radius: %g\n", flat_radius);
+    dprintf("cutting_edge_angle: %g\n", cutting_edge_angle);
+    dprintf("chamfering_step_down: %g\n", chamfering_step_down);
+    dprintf("start_depth: %g\n", start_depth);
+    dprintf("final_depth: %g\n", final_depth);
+    dprintf("delta_depth: %g\n", delta_depth);
+    dprintf("step_down: %g\n", step_down);
+    dprintf("rapid_safety_space: %g\n", rapid_safety_space);
+    dprintf("clearance_height: %g\n", clearance_height);
+    dprintf("tan_theta: %g\n", tan_theta);
+    dprintf("cot_theta: %g\n", cot_theta);
+
     /* OpenVoronoi experiment. */
-    {
+    if (true) {
       ovd::VoronoiDiagram vd(2.,100);
-      dprintf("... OpenVoronoi version: %s\n", vd.version().c_str());
+      dprintf("... OpenVoronoi version: %s\n", ovd::version().c_str());
 
       //ovd::Point p0(-0.1,-0.2);
       //ovd::Point p1(0.2,0.1);
@@ -333,6 +586,8 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       //ovd::Point p4(-0.6,0.3);
 	  std::list<HeeksObj *> children(GetChildren());
       TranslateScale ts;
+      double p[3], c[3];
+
       dprintf("ConvertSketchesToOVD() ...\n");
       bool result = CPocket::ConvertSketchesToOVD(children, vd, ts, pMachineState);
       dprintf("... ConvertSketchesToOVD() done.\n");
@@ -342,47 +597,208 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       dprintf("PolygonInterior() ...\n");
       ovd::PolygonInterior pi(g, true);
       dprintf("MedialAxis() ...\n");
-      ovd::MedialAxis ma(g);
-      dprintf("MedialAxisWalk() ...\n");
-      ovd::MedialAxisWalk maw(g);
+      ovd::MedialAxis ma(g, 0.9);
+      dprintf("MedialAxisEdgeWalk() ...\n");
+      ovd::MedialAxisEdgeWalk maw(g);
+
       dprintf("walk() ...\n");
-      ovd::ChainList toolpath = maw.walk();
-      double p[3];
+      ovd::EdgeVectors toolpath = maw.walk();
       dprintf("converting maw to toolpath) ...\n");
-      python << _T("comment(") << PythonString(_("medial axis walk")) << _T(")\n");
-      {
-        // Up to clearance height.
-        CNCPoint temp(pMachineState->Location());
-        temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
-        python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-        pMachineState->Location(temp);
+
+      ovd::MedialChainList chain_list;
+      ovd::MedialChain chain;
+      ovd::MedialPointList move;
+      double s_delta_depth = -delta_depth/cot_theta;
+      ts.scale(s_delta_depth);
+      BOOST_FOREACH( ovd::EdgeVector edge_vec, toolpath ) {
+        chain = ovd::MedialChain();
+        BOOST_FOREACH( ovd::HEEdge e, edge_vec ) {
+          ovd::HEVertex v_src = g.source(e);
+          ovd::HEVertex v_trg = g.target(e);
+          double t_src = g[v_src].dist();
+          double t_trg = g[v_trg].dist();
+          double t_min = std::min(t_src,t_trg);
+          double t_max = std::max(t_src,t_trg);
+          t_min = std::min(t_min, s_delta_depth);
+          t_max = std::min(t_max, s_delta_depth);
+
+          move = ovd::MedialPointList();
+          //bool result = ovd::medial_points(g, e, move);
+
+          if (t_min < s_delta_depth) {
+            switch (g[e].type) {
+            // these edge-types are drawn as a single line from source to target.
+            case ovd::LINELINE:
+            case ovd::PARA_LINELINE: {
+                if (t_src<=t_trg) {
+                  ovd::MedialPoint p_src( g[e].point(t_min), t_min);
+                  ovd::MedialPoint p_trg( g[e].point(t_max), t_max);
+                  move.push_back(p_src);
+                  move.push_back(p_trg);
+                } else if (t_trg < t_src) {
+                  ovd::MedialPoint p_src( g[e].point(t_max), t_max);
+                  ovd::MedialPoint p_trg( g[e].point(t_min), t_min);
+                  move.push_back(p_src);
+                  move.push_back(p_trg);
+                }
+              }
+              break;
+            // these edge-types are drawn as polylines with edge_points number of points
+            case ovd::PARABOLA:
+            case ovd::LINE: {
+                    int para_pts = 20;
+                    for (int n=0;n< para_pts;n++) {
+                        double t(0);
+                        // NOTE: quadratic t-dependence. More points at smaller t.
+                        if (t_src<=t_trg) // increasing t-value
+                            t = t_min + ((t_max-t_min)/ovd::numeric::sq(para_pts-1))*ovd::numeric::sq(n);
+                        else if (t_trg<t_src) { // decreasing t-value
+                            int m = para_pts-1-n; // m goes from (N-1)...0   as n goes from 0...(N-1)
+                            t = t_min + ((t_max-t_min)/ovd::numeric::sq(para_pts-1))*ovd::numeric::sq(m);
+                        }
+                        ovd::Point p = g[e].point(t);
+                        ovd::MedialPoint pt( p, t );
+                        move.push_back(pt);
+                    }
+                }
+                break;
+            default:
+                break;
+            }
+            chain.push_back(move);
+          } else {
+            // entire edge is too low.
+            if (0 < int(chain.size())) {
+              chain_list.push_back(chain);
+              chain =  ovd::MedialChain();
+            }
+          }
+        }
+        if (0 < int(chain.size())) {
+          chain_list.push_back(chain);
+        }
       }
-      BOOST_FOREACH( ovd::Chain chain, toolpath ) { // loop through each chain
-        python << _T("comment(") << PythonString(_("medial axis chain")) << _T(")\n");
+
+      python << _T("comment(") << PythonString(_("medial axis walk")) << _T(")\n");
+      python << rapid_up_to_clearance(pMachineState, this, p);
+
+      BOOST_FOREACH( ovd::MedialChain c, chain_list ) {
+        python << _T("comment(") << PythonString(_("medial axis")) << _T(")\n");
         int n = 0;
-        BOOST_FOREACH( ovd::MedialPointList move, chain ) { // loop through each point-list
-          python << _T("comment(") << PythonString(_("medial axis")) << _T(")\n");
-          BOOST_FOREACH( ovd::MedialPoint pt_dist, move ) { // loop through each Point/distance
+        BOOST_FOREACH( ovd::MedialPointList m, c ) {
+          BOOST_FOREACH( ovd::MedialPoint pt_dist, m ) { // loop through each Point/distance
             ts.inv_scale_translate(pt_dist.p);
             ts.inv_scale(pt_dist.clearance_radius);
             p[0] = pt_dist.p.x;
             p[1] = pt_dist.p.y;
-            p[2] = -pt_dist.clearance_radius;
+            p[2] = start_depth - pt_dist.clearance_radius*cot_theta;
             if (n == 0) {
-              {
-                // Rapid up to clearance height.
-                CNCPoint temp(pMachineState->Location());
-                temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
-                python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-                pMachineState->Location(temp);
-              }
-              {
-                // Rapid travel to next plunge location.
-                CNCPoint temp(pMachineState->Fixture().Adjustment(p));
-                temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
-                python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-                pMachineState->Location(temp);
-              }
+              python << rapid_travel_to_next_plunge(pMachineState, this, p);
+              python << rapid_plunge_to_full_depth(pMachineState, this, p);
+            } else {
+              python << feed_to(pMachineState, this, p);
+            }
+            n++;
+          }
+        }
+        python << rapid_up_to_clearance(pMachineState, this, p);
+      }
+
+      // BOOST_FOREACH( ovd::MedialChain chain, toolpath ) { // loop through each chain
+      //   python << _T("comment(") << PythonString(_("medial axis chain")) << _T(")\n");
+      //   int n = 0;
+      //   BOOST_FOREACH( ovd::MedialPointList move, chain ) { // loop through each point-list
+      //     python << _T("comment(") << PythonString(_("medial axis")) << _T(")\n");
+      //     BOOST_FOREACH( ovd::MedialPoint pt_dist, move ) { // loop through each Point/distance
+      //       ts.inv_scale_translate(pt_dist.p);
+      //       ts.inv_scale(pt_dist.clearance_radius);
+      //       p[0] = pt_dist.p.x;
+      //       p[1] = pt_dist.p.y;
+      //       p[2] = -pt_dist.clearance_radius;
+      //       if (n == 0) {
+      //         {
+      //           // Rapid up to clearance height.
+      //           CNCPoint temp(pMachineState->Location());
+      //           temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+      //           python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+      //           pMachineState->Location(temp);
+      //         }
+      //         {
+      //           // Rapid travel to next plunge location.
+      //           CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+      //           temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+      //           python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+      //           pMachineState->Location(temp);
+      //         }
+      //         //{
+      //         //  // Rapid plunge to plunge depth.
+      //         //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+      //         //  temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+      //         //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+      //         //  pMachineState->Location(temp);
+      //         //}
+      //         //{
+      //         //  // Feed from plunge depth to full depth.
+      //         //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+      //         //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+      //         //  pMachineState->Location(temp);
+      //         //}
+      //         {
+      //           // For now, rapid plunge to full depth.
+      //           CNCPoint temp(pMachineState->Fixture().Adjustment(p));
+      //           python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+      //           pMachineState->Location(temp);
+      //         }
+      //       } else {
+      //         CNCPoint cnc_pt(pMachineState->Fixture().Adjustment(p));
+      //         //std::cout << "position:" << pt_dist.p << "; clearance_radius:" << pt_dist.clearance_radius << std::endl;;
+      //         python << _T("feed(x=") << cnc_pt.X(true) << _T(", y=") << cnc_pt.Y(true) << _T(", z=") << cnc_pt.Z(true) << _T(")\n");
+      //         pMachineState->Location(cnc_pt);
+      //       }
+      //       n++;
+      //     }
+      //   }
+      //   {
+      //     // Now get back up to clearance height.
+      //     CNCPoint temp(pMachineState->Location());
+      //     temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
+      //     python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
+      //     pMachineState->Location(temp);
+      //   }
+      // }
+
+
+      //dprintf("IslandFilter() ...\n");
+      //ovd::IslandFilter isle_fltr(g);
+      dprintf("filter_reset() ....\n");
+      vd.filter_reset();
+      dprintf("PolygonInterior() ...\n");
+      ovd::PolygonInterior(g, true);
+      dprintf("Offset() ...\n");
+      ovd::Offset ofs(g);
+      double step = step_down * tan_theta;
+      double scaled_step = step;
+      ts.scale(scaled_step);
+      ovd::OffsetLoops lops = ofs.offset(scaled_step);
+      dprintf("(offset %g) lops.size(): %d ..\n", step, int(lops.size()));
+
+      for(int i=1; 0 < lops.size(); lops = ofs.offset(scaled_step*++i)){
+        python << _T("comment('offset loop, t=") << i*step << _T("')\n");
+        dprintf("(offset %g) lops.size(): %d ...\n", i*step, int(lops.size()));
+        BOOST_FOREACH(ovd::OffsetLoop lop, lops){
+          int n = 0;
+          dprintf("(offset %g) lop.size(): %d ...\n", i*step, int(lop.size()));
+          ovd::Point previous_pt;
+          BOOST_FOREACH(ovd::OffsetVertex ofv, lop){
+            //dprintf("vertex %i (%g,%g),%g,(%g,%g)%i ...\n", n, ofv.p.x, ofv.p.y, ofv.r, ofv.c.x, ofv.c.y, ofv.cw);
+            ts.inv_scale_translate(ofv.p);
+            p[0] = ofv.p.x;
+            p[1] = ofv.p.y;
+            p[2] = start_depth-i*step*cot_theta;
+            //p[2] = start_depth - pt_dist.clearance_radius*cot_theta;
+            if(n == 0){
+              python << rapid_up_to_clearance(pMachineState, this, p);
+              python << rapid_travel_to_next_plunge(pMachineState, this, p);
               //{
               //  // Rapid plunge to plunge depth.
               //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
@@ -396,34 +812,55 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
               //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
               //  pMachineState->Location(temp);
               //}
-              {
-                // For now, rapid plunge to full depth.
-                CNCPoint temp(pMachineState->Fixture().Adjustment(p));
-                python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-                pMachineState->Location(temp);
-              }
+              python << rapid_plunge_to_full_depth(pMachineState, this, p);
             } else {
-#ifdef STABLE_OPS_ONLY
-              CNCPoint cnc_pt(p);
-#else
               CNCPoint cnc_pt(pMachineState->Fixture().Adjustment(p));
-#endif
-              //std::cout << "position:" << pt_dist.p << "; clearance_radius:" << pt_dist.clearance_radius << std::endl;;
-              python << _T("feed(x=") << cnc_pt.X(true) << _T(", y=") << cnc_pt.Y(true) << _T(", z=") << cnc_pt.Z(true) << _T(")\n");
+              if((ofv.r == -1.) || ((ofv.p - previous_pt).norm() <= 0.001)){
+                python
+                << _T("feed(x=")
+                << cnc_pt.X(true)
+                << _T(", y=")
+                << cnc_pt.Y(true)
+                << _T(", z=")
+                << cnc_pt.Z(true)
+                << _T(")\n");
+              } else {
+                ts.inv_scale_translate(ofv.c);
+                ts.inv_scale(ofv.r);
+                c[0] = ofv.c.x;
+                c[1] = ofv.c.y;
+                c[2] = -i*step;
+                //python << _T("comment('arc p=") << p[0] << _T(",") << p[1] << _T(" r=") << ofv.r << _T(" c=") << c[0] << _T(",") << c[1] << _T(" cw=") << ofv.cw << _T("')\n");
+                CNCPoint cnc_ctr_pt(pMachineState->Fixture().Adjustment(c));
+                if(ofv.cw){ python << _T("arc_cw(x="); }
+                else { python << _T("arc_ccw(x="); }
+                python
+                << cnc_pt.X(true)
+                << _T(", y=")
+                << cnc_pt.Y(true)
+                << _T(", z=")
+                << cnc_pt.Z(true)
+                << _T(", i=")
+                << cnc_ctr_pt.X(true)
+                << _T(", j=")
+                << cnc_ctr_pt.Y(true)
+                //<< _T(", k=")
+                //<< cnc_ctr_pt.Z(true)
+                //<< _T(", r=")
+                //<< ofv.r
+                << _T(")\n");
+              }
               pMachineState->Location(cnc_pt);
             }
+            previous_pt = ofv.p;
             n++;
           }
         }
-        {
-          // Now get back up to clearance height.
-          CNCPoint temp(pMachineState->Location());
-          temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
-          python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-          pMachineState->Location(temp);
-        }
       }
     }
+    python << rapid_up_to_clearance(pMachineState, this);
+
+    return python;
 
     /* Demonstration: convert a list of sketches to an area. */
 	dprintf("ConvertSketchesToArea(children, area, pMachineState) ...\n");
@@ -439,17 +876,20 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
     //return python;
 
     /* Demonstration: round corners to radius of 1.5. */
-    if(false){
+    /* Demonstration: area subtraction. */
+    if(true){
       /* These two lines round the inside corners (i.e., convex corners). */
-      area.Offset(+1.5);
-      area.Offset(-1.5);
+      CArea rounded_area = area;
+      rounded_area.Offset(+1.5);
+      rounded_area.Offset(-1.5);
       /* These two lines round the outside corners (i.e., concave corners). */
-      area.Offset(-1.5);
-      area.Offset(+1.5);
+      rounded_area.Offset(-1.5);
+      rounded_area.Offset(+1.5);
+      area.Subtract(rounded_area);
     }
 
     /* Demonstration: convert an area to a list of sketches. */
-    if(false){
+    if(true){
       dprintf("ConvertAreaToSketches(area, sketches, pMachineState) ...\n");
       std::list<HeeksObj *> sketches;
       result = CPocket::ConvertAreaToSketches(area, sketches, pMachineState, 2.0);
@@ -477,7 +917,7 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 
     /* Demonstration: pocket via direct call to LibAREA. */
     /* Demonstration: convert a curve to a sketch. */
-    if(true){
+    if(false){
 	  dprintf("building CAreaPocketParams() ...\n");
       //double tool_radius = CTool::Find(m_tool_number)->CuttingRadius();
       double tool_radius = 1.;

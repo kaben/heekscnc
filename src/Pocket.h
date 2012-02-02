@@ -157,6 +157,14 @@ public:
 };
 
 struct TranslateScale {
+    TranslateScale()
+    : bits(0)
+    , bits_power(1.)
+    , inv_bits_power(1.)
+    {}
+    double bits;
+    double bits_power;
+    double inv_bits_power;
     double min_x, min_y;
     double max_x, max_y;
     double d_x, d_y;
@@ -164,6 +172,7 @@ struct TranslateScale {
     double s, is;
     double s_x, s_y;
     double is_x, is_y;
+    void set_bits(int _bits);
     void set(ovd::Point &p);
     void update(ovd::Point &p);
     void set_translate_scale();
@@ -176,5 +185,7 @@ struct TranslateScale {
     void inv_scale(double &d);
     void inv_translate(ovd::Point &p);
     void inv_scale_translate(ovd::Point &p);
+    void round(double &d);
+    void round(ovd::Point &p);
 };
 

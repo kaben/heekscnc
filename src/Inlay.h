@@ -28,16 +28,83 @@ class CInlay;
 class CInlayParams{
 public:
     typedef enum {
-		eFemale,		// No mirroring and take depths from DepthOp settings.
-		eMale,			// Reverse depth values (bottom up measurement)
-		eBoth
-	} eInlayPass_t;
+        eFemale,		// No mirroring and take depths from DepthOp settings.
+        eMale,			// Reverse depth values (bottom up measurement)
+        eBoth
+    } eInlayPass_t;
 
-	typedef enum {
-	    eXAxis = 0,
-	    eYAxis
-	} eAxis_t;
+    typedef enum {
+        eXAxis = 0,
+        eYAxis
+    } eAxis_t;
+public:
+	double m_border_width;
+	double m_min_cornering_angle;
+	CTool::ToolNumber_t  m_clearance_tool;
+	eInlayPass_t m_pass;
+	eAxis_t m_mirror_axis;
+	bool m_female_before_male_fixtures;
 
+    /*
+    TODO:
+
+    Sanity checks on various depths:
+    - Verify: start_depth is above inlay_plane_depth.
+    - Verify: final_depth is below inlay_plane_depth.
+    - Verify: chamfering_step_down <= chamfering cutting_edge_height.
+    - Define: chamfering_step_over := tan(theta)*chamfering_step_down.
+    - Verify: chamfering_step_over < (chamfering diameter/2.) - chamfering flat_radius
+    - Verify: pocketing_step_down <= pocketing cutting_edge_height.
+    - Verify: pocketing_step_over < pocketing flat_radius (== pocketing diameter/2.).
+
+    Convert to correct units.
+
+    Checks on cutting surfaces of the chamfer bit:
+    - Verify: corner_radius = 0. (That is, no ball-nose bits.)
+    - If 0. < flat_radius, we must round corners using the
+      outset-inset-inset-outset trick.
+    - If cutting_edge_angle == 0, we must revert to standard pocketing. If math
+      is handled correctly, this will need no special-casing; this would mean
+      computing the offset based on depth and cutting-edge angle.
+
+   Use CDepthOpParams:
+   - Rapid travel:
+     - Move to m_depth_op_params.m_clearance_height before rapid horizontal
+       travel between cuts.
+       - Description: "The absolute Z height that the tool will go to, to rapid
+         across between cuts."
+     - Plunge to m_depth_op_params.m_rapid_safety_space before before feeding
+       into cut.
+       - Description: "The relative height, above 'start depth', that the tool
+         rapid down to before feeding down to the first depth of cut."
+
+   - Depths:
+     - Use m_depth_op_params.m_start_depth as peak depth.
+       - Description: "The absolute Z height of the top of the material."
+     - Use m_depth_op_params.m_final_depth as trough depth.
+       - Description: "The absolute Z height of the bottom cut level."
+
+   Note:
+   - In HeeksCNC the cutting_edge_angle is the angle between the centre axis of
+     the milling bit and the angle of the outside cutting edges: for an andmill
+     this is zero; i.e. the cutting edges are parallel to the centre axis of
+     the milling bit, and for a chamfering bit it may be something like 45
+     degrees from the centre axis, which has both edges at 2*45==90 degrees to
+     each other. Some nomenclature refers to this as a "90-degree" bit, and
+     other nomenclature uses "45-degree" bit to mean the same thing.
+   */
+	double m_inlay_plane_depth;
+	double m_peak_depth;
+	double m_trough_depth;
+	double m_peak_clearance;
+	double m_trough_clearance;
+    // CTool *pChamferingBit = CTool::Find( m_tool_number );
+    // double angle = pChamferingBit->m_params.m_cutting_edge_angle / 360.0 * 2.0 * PI;
+    // double max_offset = (m_depth_op_params.m_start_depth - m_depth_op_params.m_final_depth) * tan(angle);
+    // double max_plunge_possible = max_offset * tan(angle);
+    // double max_plunge_for_chamfering_bit = pChamferingBit->m_params.m_cutting_edge_height * cos(angle);
+    // double plunge = max_plunge_possible;
+    // if (plunge > max_plunge_for_chamfering_bit) { plunge = max_plunge_for_chamfering_bit; }
 public:
 	CInlayParams()
 	{
@@ -47,22 +114,13 @@ public:
 		m_female_before_male_fixtures = true;
 		m_min_cornering_angle = 30.0;   // degrees.
 	}
-
+public:
 	void set_initial_values();
 	void write_values_to_config();
 	void GetProperties(CInlay* parent, std::list<Property *> *list);
 	void WriteXMLAttributes(TiXmlNode* pElem);
 	void ReadParametersFromXMLElement(TiXmlElement* pElem);
-
 	const wxString ConfigPrefix(void)const{return _T("Inlay");}
-
-	double m_border_width;
-	CTool::ToolNumber_t  m_clearance_tool;
-	eInlayPass_t    m_pass;
-	eAxis_t         m_mirror_axis;
-	bool			m_female_before_male_fixtures;
-	double          m_min_cornering_angle;
-
 	bool operator== ( const CInlayParams & rhs ) const;
 	bool operator!= ( const CInlayParams & rhs ) const { return(! (*this == rhs)); }
 };
