@@ -17,6 +17,7 @@
 #include "interface/PropertyDouble.h"
 #include "interface/PropertyLength.h"
 #include "interface/PropertyChoice.h"
+#include "interface/PropertyCheck.h"
 #include "tinyxml/tinyxml.h"
 #include "Operations.h"
 #include "CTool.h"
@@ -39,18 +40,28 @@
 #include "openvoronoi/medial_axis_edge_walk.hpp"
 #include "openvoronoi/offset.hpp"
 #include "openvoronoi/offset2.hpp"
-#include "openvoronoi/polygon_interior.hpp"
+#include "openvoronoi/polygon_interior_filter.hpp"
+#include "openvoronoi/medial_axis_filter.hpp"
+//#include "openvoronoi/polygon_exterior.hpp"
 #include "openvoronoi/version.hpp"
 #include "openvoronoi/voronoidiagram.hpp"
+#include "openvoronoi/common/exceptions.hpp"
 
 #include "interface/TestMacros.h"
-#include <boost/progress.hpp>
 
 
+#include <cmath>
 #include <sstream>
 #include <iomanip>
 #include <vector>
 #include <algorithm>
+#include <map>
+#include <utility>
+#include <climits>
+#include <cstring>
+
+#include <boost/progress.hpp>
+#include <boost/polygon/polygon.hpp>
 
 #include <BRepOffsetAPI_MakeOffset.hxx>
 #include <TopoDS.hxx>
@@ -75,15 +86,19 @@ extern CHeeksCADInterface* heeksCAD;
 void CInlayParams::set_initial_values()
 {
 	CNCConfig config(ConfigPrefix());
-	config.Read(_T("BorderWidth"), (double *) &m_border_width, 0.0);
-	config.Read(_T("MinCorneringAngle"), (double *) &m_min_cornering_angle, 135.0);
+	config.Read(_T("BorderWidth"), &m_border_width, 0.0);
+	config.Read(_T("MinCorneringAngle"), &m_min_cornering_angle, 135.0);
 	config.Read(_T("ClearanceTool"), &m_clearance_tool, 0);
 	config.Read(_T("Pass"), (int *) &m_pass, (int) eBoth );
 	config.Read(_T("MirrorAxis"), (int *) &m_mirror_axis, (int) eXAxis );
 
-	config.Read(_T("InlayPlaneDepth"), (double *) &m_inlay_plane_depth, 0.5);
-	config.Read(_T("PeakClearance"), (double *) &m_peak_clearance, 0.5);
-	config.Read(_T("TroughClearance"), (double *) &m_trough_clearance, 0.5);
+	config.Read(_T("ClearancePocketing"), &m_enable_clearance_pocketing, true );
+	config.Read(_T("CornerPocketing"), &m_enable_corner_pocketing, true );
+	config.Read(_T("WallChamfering"), &m_enable_wall_chamfering, true );
+	config.Read(_T("MedialAxis"), &m_enable_medial_axis, true );
+
+	config.Read(_T("InlayPlaneDepth"), &m_inlay_plane_depth, -0.5 );
+	config.Read(_T("PeakTroughTolerance"), &m_peak_trough_tolerance, 0.5 );
 }
 
 void CInlayParams::write_values_to_config()
@@ -95,9 +110,13 @@ void CInlayParams::write_values_to_config()
 	config.Write(_T("Pass"), (int) m_pass );
 	config.Write(_T("MirrorAxis"), (int) m_mirror_axis );
 
-	config.Read(_T("InlayPlaneDepth"), (double *) &m_inlay_plane_depth);
-	config.Read(_T("PeakClearance"), (double *) &m_peak_clearance);
-	config.Read(_T("TroughClearance"), (double *) &m_trough_clearance);
+	config.Write(_T("ClearancePocketing"), m_enable_clearance_pocketing );
+	config.Write(_T("CornerPocketing"), m_enable_corner_pocketing );
+	config.Write(_T("WallChamfering"), m_enable_wall_chamfering );
+	config.Write(_T("MedialAxis"), m_enable_medial_axis );
+
+	config.Write(_T("InlayPlaneDepth"), m_inlay_plane_depth );
+	config.Write(_T("PeakTroughTolerance"), m_peak_trough_tolerance );
 }
 
 static void on_set_border_width(double value, HeeksObj* object)
@@ -170,21 +189,39 @@ static void on_set_male_fixture(int value, HeeksObj* object)
 	heeksCAD->Changed();
 }
 
+static void on_set_enable_clearance_pocketing(bool value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_enable_clearance_pocketing = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
+static void on_set_enable_corner_pocketing(bool value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_enable_corner_pocketing = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
+static void on_set_enable_wall_chamfering(bool value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_enable_wall_chamfering = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
+static void on_set_enable_medial_axis(bool value, HeeksObj* object)
+{
+	((CInlay*)object)->m_params.m_enable_medial_axis = value;
+	((CInlay*)object)->WriteDefaultValues();
+}
+
 static void on_set_inlay_plane_depth(double value, HeeksObj* object)
 {
 	((CInlay*)object)->m_params.m_inlay_plane_depth = value;
 	((CInlay*)object)->WriteDefaultValues();
 }
 
-static void on_set_peak_clearance(double value, HeeksObj* object)
+static void on_set_peak_trough_tolerance(double value, HeeksObj* object)
 {
-	((CInlay*)object)->m_params.m_peak_clearance = value;
-	((CInlay*)object)->WriteDefaultValues();
-}
-
-static void on_set_trough_clearance(double value, HeeksObj* object)
-{
-	((CInlay*)object)->m_params.m_trough_clearance = value;
+	((CInlay*)object)->m_params.m_peak_trough_tolerance = value;
 	((CInlay*)object)->WriteDefaultValues();
 }
 
@@ -267,41 +304,121 @@ void CInlayParams::GetProperties(CInlay* parent, std::list<Property *> *list)
 		}
 	}
 
+	list->push_back(new PropertyCheck(_("Clearance Pocketing"), m_enable_clearance_pocketing, parent, on_set_enable_clearance_pocketing));
+	list->push_back(new PropertyCheck(_("Corner Pocketing"), m_enable_corner_pocketing, parent, on_set_enable_corner_pocketing));
+	list->push_back(new PropertyCheck(_("Wall Chamfering"), m_enable_wall_chamfering, parent, on_set_enable_wall_chamfering));
+	list->push_back(new PropertyCheck(_("Medial Axis"), m_enable_medial_axis, parent, on_set_enable_medial_axis));
+
 	list->push_back(new PropertyDouble(_("Inlay Plane Depth"), m_inlay_plane_depth, parent, on_set_inlay_plane_depth));
-	list->push_back(new PropertyDouble(_("Peak Clearance"), m_peak_clearance, parent, on_set_peak_clearance));
-	list->push_back(new PropertyDouble(_("Trough Clearance"), m_trough_clearance, parent, on_set_trough_clearance));
+	list->push_back(new PropertyDouble(_("Peak/Trough Tolerance"), m_peak_trough_tolerance, parent, on_set_peak_trough_tolerance));
 }
 
 void CInlayParams::WriteXMLAttributes(TiXmlNode *root)
 {
 	TiXmlElement * element;
-	element = heeksCAD->NewXMLElement( "params" );
+	element = heeksCAD->NewXMLElement( "inlayop" );
 	heeksCAD->LinkXMLEndChild( root,  element );
 
-	element->SetAttribute( "border", m_border_width);
+	element->SetDoubleAttribute( "border", m_border_width);
 	element->SetAttribute( "min_cornering_angle", m_min_cornering_angle);
 	element->SetAttribute( "clearance_tool", m_clearance_tool);
 	element->SetAttribute( "pass", (int) m_pass);
 	element->SetAttribute( "mirror_axis", (int) m_mirror_axis);
 	element->SetAttribute( "female_before_male_fixtures", (int) (m_female_before_male_fixtures?1:0));
+
+	element->SetAttribute( "enable_clearance_pocketing", (int) (m_enable_clearance_pocketing?1:0));
+	element->SetAttribute( "enable_corner_pocketing", (int) (m_enable_corner_pocketing?1:0));
+	element->SetAttribute( "enable_wall_chamfering", (int) (m_enable_wall_chamfering?1:0));
+	element->SetAttribute( "enable_medial_axis", (int) (m_enable_medial_axis?1:0));
+
+	element->SetDoubleAttribute( "inlay_plane_depth", m_inlay_plane_depth);
+	element->SetDoubleAttribute( "peak_trough_tolerance", m_peak_trough_tolerance);
 }
+
+//void CInlayParams::ReadParametersFromXMLElement(TiXmlElement* pElem)
+//{
+//	pElem->Attribute("border", &m_border_width);
+//	if (pElem->Attribute("min_cornering_angle")) pElem->Attribute("min_cornering_angle", &m_min_cornering_angle);
+//	pElem->Attribute("clearance_tool", &m_clearance_tool);
+//	pElem->Attribute("pass", (int *) &m_pass);
+//	pElem->Attribute("mirror_axis", (int *) &m_mirror_axis);
+//
+//	int temp;
+//	pElem->Attribute("female_before_male_fixtures", (int *) &temp);
+//	m_female_before_male_fixtures = (temp != 0);
+//
+//	int int_for_bool = false;
+//	if (pElem->Attribute("enable_clearance_pocketing")) {
+//        pElem->Attribute("enable_clearance_pocketing", &int_for_bool);
+//	    m_enable_clearance_pocketing = (int_for_bool != 0);
+//    }
+//    if (pElem->Attribute("enable_corner_pocketing")) {
+//	    pElem->Attribute("enable_corner_pocketing", &int_for_bool);
+//	    m_enable_corner_pocketing = (int_for_bool != 0);
+//    }
+//    if (pElem->Attribute("enable_wall_chamfering")) {
+//	    pElem->Attribute("enable_wall_chamfering", &int_for_bool);
+//	    m_enable_wall_chamfering = (int_for_bool != 0);
+//    }
+//    if (pElem->Attribute("enable_medial_axis")) {
+//	    pElem->Attribute("enable_medial_axis", &int_for_bool);
+//	    m_enable_medial_axis = (int_for_bool != 0);
+//    }
+//
+//	if (pElem->Attribute("inlay_plane_depth")) {
+//        pElem->Attribute("inlay_plane_depth", &m_inlay_plane_depth);
+//    }
+//	if (pElem->Attribute("peak_trough_tolerance")) {
+//        pElem->Attribute("peak_trough_tolerance", &m_peak_trough_tolerance);
+//    }
+//}
 
 void CInlayParams::ReadParametersFromXMLElement(TiXmlElement* pElem)
 {
-	pElem->Attribute("border", &m_border_width);
-	if (pElem->Attribute("min_cornering_angle")) pElem->Attribute("min_cornering_angle", &m_min_cornering_angle);
-	pElem->Attribute("clearance_tool", &m_clearance_tool);
-	pElem->Attribute("pass", (int *) &m_pass);
-	pElem->Attribute("mirror_axis", (int *) &m_mirror_axis);
+	int int_for_bool;
+	if (pElem->Attribute("border")) {
+	    pElem->Attribute("border", &m_border_width);
+    }
+	if (pElem->Attribute("min_cornering_angle")) {
+        pElem->Attribute("min_cornering_angle", &m_min_cornering_angle);
+    }
+	if (pElem->Attribute("clearance_tool")) {
+	    pElem->Attribute("clearance_tool", &m_clearance_tool);
+    }
+	if (pElem->Attribute("pass")) {
+	    pElem->Attribute("pass", (int *) &m_pass);
+    }
+	if (pElem->Attribute("mirror_axis")) {
+	    pElem->Attribute("mirror_axis", (int *) &m_mirror_axis);
+    }
 
-	int temp;
-	pElem->Attribute("female_before_male_fixtures", (int *) &temp);
-	m_female_before_male_fixtures = (temp != 0);
+	if (pElem->Attribute("female_before_male_fixtures")) {
+	    pElem->Attribute("female_before_male_fixtures", &int_for_bool);
+	    m_female_before_male_fixtures = (int_for_bool != 0);
+    }
+	if (pElem->Attribute("enable_clearance_pocketing")) {
+        pElem->Attribute("enable_clearance_pocketing", &int_for_bool);
+	    m_enable_clearance_pocketing = (int_for_bool != 0);
+    }
+    if (pElem->Attribute("enable_corner_pocketing")) {
+	    pElem->Attribute("enable_corner_pocketing", &int_for_bool);
+	    m_enable_corner_pocketing = (int_for_bool != 0);
+    }
+    if (pElem->Attribute("enable_wall_chamfering")) {
+	    pElem->Attribute("enable_wall_chamfering", &int_for_bool);
+	    m_enable_wall_chamfering = (int_for_bool != 0);
+    }
+    if (pElem->Attribute("enable_medial_axis")) {
+	    pElem->Attribute("enable_medial_axis", &int_for_bool);
+	    m_enable_medial_axis = (int_for_bool != 0);
+    }
 
-	if (pElem->Attribute("inlay_plane_depth")) pElem->Attribute("inlay_plane_depth", &m_inlay_plane_depth);
-	if (pElem->Attribute("peak_clearance")) pElem->Attribute("peak_clearance", &m_peak_clearance);
-	if (pElem->Attribute("trough_clearance")) pElem->Attribute("trough_clearance", &m_trough_clearance);
-
+	if (pElem->Attribute("inlay_plane_depth")) {
+        pElem->Attribute("inlay_plane_depth", &m_inlay_plane_depth);
+    }
+	if (pElem->Attribute("peak_trough_tolerance")) {
+        pElem->Attribute("peak_trough_tolerance", &m_peak_trough_tolerance);
+    }
 }
 
 
@@ -314,7 +431,7 @@ const wxBitmap &CInlay::GetIcon()
 	return *icon;
 }
 
-Python rapid_up_to_clearance(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+Python rapid_to_clearance(CMachineState *machine_state, CInlay *inlay, double p[3]) {
     Python python;
     // Up to clearance height.
     CNCPoint temp(machine_state->Location());
@@ -324,12 +441,12 @@ Python rapid_up_to_clearance(CMachineState *machine_state, CInlay *inlay, double
     return python;
 }
 
-Python rapid_up_to_clearance(CMachineState *machine_state, CInlay *inlay) {
+Python rapid_to_clearance(CMachineState *machine_state, CInlay *inlay) {
     double p[3] = {0., 0., 0.};
-    return rapid_up_to_clearance(machine_state, inlay, p);
+    return rapid_to_clearance(machine_state, inlay, p);
 }
 
-Python rapid_travel_to_next_plunge(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+Python rapid_to_plunge(CMachineState *machine_state, CInlay *inlay, double p[3]) {
     Python python;
     // Rapid travel to next plunge location.
     CNCPoint temp(machine_state->Fixture().Adjustment(p));
@@ -339,7 +456,7 @@ Python rapid_travel_to_next_plunge(CMachineState *machine_state, CInlay *inlay, 
     return python;
 }
 
-Python rapid_plunge_to_full_depth(CMachineState *machine_state, CInlay *inlay, double p[3]) {
+Python rapid_plunge(CMachineState *machine_state, CInlay *inlay, double p[3]) {
     Python python;
     // Rapid travel to next plunge location.
     CNCPoint temp(machine_state->Fixture().Adjustment(p));
@@ -352,6 +469,18 @@ Python feed_to(CMachineState *machine_state, CInlay *inlay, double p[3]) {
     Python python;
     CNCPoint cnc_pt(machine_state->Fixture().Adjustment(p));
     python << _T("feed(x=") << cnc_pt.X(true) << _T(", y=") << cnc_pt.Y(true) << _T(", z=") << cnc_pt.Z(true) << _T(")\n");
+    machine_state->Location(cnc_pt);
+    return python;
+}
+
+Python arc_to(CMachineState *machine_state, CInlay *inlay, double p[3], double c[3], bool cw) {
+    Python python;
+    CNCPoint cnc_pt(machine_state->Fixture().Adjustment(p));
+    CNCPoint cnc_ctr_pt(machine_state->Fixture().Adjustment(c));
+    if(cw){ python << _T("arc_cw(x="); }
+    else { python << _T("arc_ccw(x="); }
+    python << cnc_pt.X(true) << _T(", y=") << cnc_pt.Y(true) << _T(", z=") << cnc_pt.Z(true)
+    << _T(", i=") << cnc_ctr_pt.X(true) << _T(", j=") << cnc_ctr_pt.Y(true) << _T(")\n");
     machine_state->Location(cnc_pt);
     return python;
 }
@@ -393,20 +522,938 @@ Python feed_to(CMachineState *machine_state, CInlay *inlay, double p[3]) {
     both halves are generated.
  */
 
+
+void GenerateOVDOffsets(
+  std::vector<double> &depths_array,
+  std::vector<double> &offsets_array,
+  std::vector<double> &scaled_offsets_array,
+  std::vector<ovd::OffsetLoops> &loop_array,
+  ovd::OffsetLoops &original_loops,
+  TranslateScale &ts,
+  ovd::VoronoiDiagram &vd,
+  ovd::HEGraph &g,
+  double start_depth,
+  double inlay_plane_depth,
+  double final_depth,
+  double bit_flat_radius,
+  double step_down,
+  double step_slope
+){
+  double depth = start_depth;
+  double offset = bit_flat_radius + (inlay_plane_depth - depth)*step_slope;
+  double scaled_offset;
+  ovd::OffsetLoops loops;
+
+  vd.filter_reset();
+  //ovd::PolygonInterior(g, false);
+  ovd::polygon_interior_filter pef(false);
+  // 'false' arg causes filter to select exterior. Think of this as a
+  // polygon_exterior_filter.
+  ovd::polygon_interior_filter pif(true);
+  vd.filter(&pef);
+  ovd::Offset ofs(g);
+
+  while (offset <= 0.) {
+    scaled_offset = offset;
+    ts.scale(scaled_offset);
+
+    dprintf("depth: %g\n", depth);
+    dprintf("offset: %g\n", offset);
+    dprintf("scaled_offset: %g\n", scaled_offset);
+
+    // When 0 == scaled_wall_offset, push_back the original loops.
+    if (0 == scaled_offset) { loops = original_loops; }
+    else { loops = ofs.offset(scaled_offset); }
+    // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+    if (0 == loops.size()) { break; }
+
+    offsets_array.push_back(offset);
+    scaled_offsets_array.push_back(scaled_offset);
+    loop_array.push_back(loops);
+    if (final_depth < depth) { depths_array.push_back(depth); }
+
+    depth -= step_down;
+    offset = bit_flat_radius + (inlay_plane_depth - depth)*step_slope;
+  }
+
+  vd.filter_reset();
+  //ovd::PolygonInterior(g, true);
+  vd.filter(&pif);
+  while (true) {
+    scaled_offset = offset;
+    ts.scale(scaled_offset);
+
+    dprintf("depth: %g\n", depth);
+    dprintf("offset: %g\n", offset);
+    dprintf("scaled_offset: %g\n", scaled_offset);
+
+    // When 0 == scaled_wall_offset, push_back the original loops.
+    if (0 == scaled_offset) { loops = original_loops; }
+    else { loops = ofs.offset(scaled_offset); }
+    // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+    if (0 == loops.size()) { break; }
+
+    offsets_array.push_back(offset);
+    scaled_offsets_array.push_back(scaled_offset);
+    loop_array.push_back(loops);
+    if (final_depth < depth) { depths_array.push_back(depth); }
+
+    depth -= step_down;
+    offset = bit_flat_radius + (inlay_plane_depth - depth)*step_slope;
+  }
+
+}
+
+std::string DumpPathFromOVDLoop(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  ovd::OffsetLoop &loop,
+  TranslateScale &ts,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  std::streamsize saved_precision = cout.precision(15);
+  std::stringstream dump;
+  double p[3], c[3];
+
+  int n = 0;
+  ovd::Point previous_pt;
+  BOOST_FOREACH(ovd::OffsetVertex ofv, loop){
+    ts.inv_scale_translate(ofv.p);
+    p[0] = ofv.p.x; p[1] = ofv.p.y; p[2] = depth;
+    if(n == 0){
+      //dump << "rapid_to_clearance(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      std::cout << "rapid_to_clearance(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      //dump << "rapid_to_plunge(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      std::cout << "rapid_to_plunge(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      // Rapid plunge to plunge depth.
+      // Feed from plunge depth to full depth.
+      p[2] = start_depth + rapid_safety_space;
+      //dump << "rapid_plunge(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      std::cout << "rapid_plunge(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      p[2] = depth;
+      //dump << "feed_to(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      std::cout << "feed_to(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+    } else {
+      if((ofv.r == -1.) || ((ofv.p - previous_pt).norm() <= 0.01)){
+        // Line, or an arc so tiny we should treat it as a line.
+        //dump << "feed_to(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+        std::cout << "feed_to(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      } else {
+        // Arc.
+        ts.inv_scale_translate(ofv.c);
+        ts.inv_scale(ofv.r);
+        c[0] = ofv.c.x; c[1] = ofv.c.y; c[2] = depth;
+        //dump << "arc_to(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+        std::cout << "arc_to(" << p[0] << "," << p[1] << "," << p[2] << ")" << std::endl;
+      }
+    }
+    previous_pt = ofv.p;
+    n++;
+  }
+  
+  //std::cout << dump;
+  cout.precision(saved_precision);
+  return dump.str();
+}
+
+std::string DumpPathFromOVDLoops(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  double offset,
+  ovd::OffsetLoops &loops,
+  TranslateScale &ts,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  std::stringstream dump;
+  //dump << "comment('loops at offset t=" << offset << "'" << std::endl;
+  std::cout << "comment('loops at offset t=" << offset << "'" << std::endl;
+  BOOST_FOREACH(ovd::OffsetLoop loop, loops){
+    //dump << "comment('new loop at offset t=" << offset << "'" << std::endl;
+    std::cout << "comment('new loop at offset t=" << offset << "'" << std::endl;
+    dump << DumpPathFromOVDLoop(depth, start_depth, rapid_safety_space, loop, ts, machine_state, inlay);
+  }
+  //std::cout << dump;
+  return dump.str();
+}
+
+std::string DumpPathFromOVDLoops(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  ovd::OffsetLoops &loops,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  TranslateScale ts;
+  ts.min_x = ts.min_y = -0.5;
+  ts.max_x = ts.max_y = 0.5;
+  ts.set_translate_scale_fixed_aspect();
+  return DumpPathFromOVDLoops(depth, start_depth, rapid_safety_space, 0., loops, ts, machine_state, inlay);
+}
+
+template <typename T> T chopTo(const T& x, int to_bits) {
+  int exp = 0;
+  T significand = frexp(x, &exp);
+  significand = round(significand * pow(2, to_bits)) * pow(2, -to_bits);
+  return ldexp(significand, exp);
+}
+
+void ChopLoop(ovd::OffsetLoop &loop, int to_bits) {
+  int n = loop.size();
+  for (int i=0; i<n; i++) {
+    loop[i].p.x = chopTo(loop[i].p.x, to_bits);
+    loop[i].p.y = chopTo(loop[i].p.y, to_bits);
+    loop[i].c.x = chopTo(loop[i].c.x, to_bits);
+    loop[i].c.y = chopTo(loop[i].c.y, to_bits);
+  }
+}
+
+void ChopLoops(ovd::OffsetLoops &loops, int to_bits) {
+  int n = loops.size();
+  for (int i=0; i<n; i++) {
+    ChopLoop(loops[i], to_bits);
+  }
+}
+
+Python GeneratePathFromOVDLoop(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  ovd::OffsetLoop &loop,
+  TranslateScale &ts,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  Python python;
+  double p[3], c[3];
+
+  int n = 0;
+  ovd::Point previous_pt;
+  BOOST_FOREACH(ovd::OffsetVertex ofv, loop){
+    ts.inv_scale_translate(ofv.p);
+    p[0] = ofv.p.x; p[1] = ofv.p.y; p[2] = depth;
+    if(n == 0){
+      python << rapid_to_clearance(machine_state, &inlay, p);
+      python << rapid_to_plunge(machine_state, &inlay, p);
+      // Rapid plunge to plunge depth.
+      // Feed from plunge depth to full depth.
+      p[2] = start_depth + rapid_safety_space;
+      python << rapid_plunge(machine_state, &inlay, p);
+      p[2] = depth;
+      python << feed_to(machine_state, &inlay, p);
+    } else {
+      if((ofv.r == -1.) || ((ofv.p - previous_pt).norm() <= 0.01)){
+        // Line, or an arc so tiny we should treat it as a line.
+        python << feed_to(machine_state, &inlay, p);
+      } else {
+        // Arc.
+        ts.inv_scale_translate(ofv.c);
+        ts.inv_scale(ofv.r);
+        c[0] = ofv.c.x; c[1] = ofv.c.y; c[2] = depth;
+        python << arc_to(machine_state, &inlay, p, c, ofv.cw);
+      }
+    }
+    previous_pt = ofv.p;
+    n++;
+  }
+  
+  return python;
+}
+
+Python GeneratePathFromOVDLoop(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  ovd::OffsetLoop &loop,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  TranslateScale ts;
+  ts.min_x = ts.min_y = -0.5;
+  ts.max_x = ts.max_y = 0.5;
+  ts.set_translate_scale_fixed_aspect();
+  return GeneratePathFromOVDLoop(depth, start_depth, rapid_safety_space, loop, ts, machine_state, inlay);
+}
+
+Python GeneratePathFromOVDLoops(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  double offset,
+  ovd::OffsetLoops &loops,
+  TranslateScale &ts,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  Python python;
+  python << _T("comment('loops at offset t=") << offset << _T("')\n");
+  BOOST_FOREACH(ovd::OffsetLoop loop, loops){
+    python << _T("comment('new loop at offset t=") << offset << _T("')\n");
+    python << GeneratePathFromOVDLoop(depth, start_depth, rapid_safety_space, loop, ts, machine_state, inlay);
+  }
+  return python;
+}
+
+Python GeneratePathFromOVDLoops(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  ovd::OffsetLoops &loops,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  TranslateScale ts;
+  ts.min_x = ts.min_y = -0.5;
+  ts.max_x = ts.max_y = 0.5;
+  ts.set_translate_scale_fixed_aspect();
+  return GeneratePathFromOVDLoops(depth, start_depth, rapid_safety_space, 0., loops, ts, machine_state, inlay);
+}
+
+
+Python GeneratePathFromCurve(
+  double depth,
+  double start_depth,
+  double rapid_safety_space,
+  CCurve &curve,
+  CMachineState *machine_state,
+  CInlay &inlay
+) {
+  Python python;
+
+  double first[3], start[3], end[3], centre[3];
+  int n = 0;
+  std::list<Span> spans;
+  curve.GetSpans(spans);
+  for(std::list<Span>::iterator s = spans.begin(); s != spans.end(); s++){
+    start[0] = s->m_p.x; start[1] = s->m_p.y; start[2] = depth;
+    if (0 == n) {
+      first[0] = start[0]; first[1] = start[1]; first[2] = start[2];
+      python << rapid_to_clearance(machine_state, &inlay, first);
+      python << rapid_to_plunge(machine_state, &inlay, first);
+      first[2] = start_depth + rapid_safety_space;
+      python << rapid_plunge(machine_state, &inlay, first);
+      first[2] = depth;
+      python << feed_to(machine_state, &inlay, first);
+    } else {
+      for (int i=0; i<3; i++){
+        if ((start[i] != end[i])) {
+          dprintf("WARNING: start of new line doesn't coincide with end of previous line at coordinate %d.\n", i);
+        }
+      }
+    }
+    end[0] = s->m_v.m_p.x; end[1] = s->m_v.m_p.y; end[2] = depth;
+    if ((0 == s->m_v.m_type) || (ovd::Point(end[0]-start[0], end[1]-start[1]).norm_sq() < 0.00001)) {
+      // Line.
+      python << feed_to(machine_state, &inlay, end);
+    }
+    else {
+      // Arc.
+      centre[0] = s->m_v.m_c.x; centre[1] = s->m_v.m_c.y; centre[2] = depth;
+      bool cw=(s->m_v.m_type == 1)?(true):(false);
+      python << arc_to(machine_state, &inlay, end, centre, cw);
+    }
+    n++;
+  }
+  return python;
+}
+
+void OffsetOVDLoopsOutward(ovd::OffsetLoops& loops, double radius)
+{
+  ovd::VoronoiDiagram vd(2.,100);
+  TranslateScale ts;
+  CPocket::GetOVDOffsetLoopsScaling(loops, ts);
+  CPocket::ScaleOVDOffsetLoops(loops, ts);
+  CPocket::AddOffsetLoopsToOVD(vd, loops);
+  ovd::HEGraph& g = vd.get_graph_reference();
+  vd.filter_reset();
+  //ovd::PolygonInterior(g, true);
+  ovd::polygon_interior_filter pif(true);
+  vd.filter(&pif);
+  ovd::Offset ofs(g);
+  ts.scale(radius);
+  loops = ofs.offset(radius);
+  CPocket::InvScaleOVDOffsetLoops(loops, ts);
+  dprintf("radius: %g\n", radius);
+}
+
+void OffsetOVDLoopsInward(ovd::OffsetLoops& loops, double radius)
+{
+  ovd::VoronoiDiagram vd(2.,100);
+  TranslateScale ts;
+  CPocket::GetOVDOffsetLoopsScaling(loops, ts);
+  CPocket::ScaleOVDOffsetLoops(loops, ts);
+  CPocket::AddOffsetLoopsToOVD(vd, loops);
+  ovd::HEGraph& g = vd.get_graph_reference();
+  vd.filter_reset();
+  //ovd::PolygonInterior(g, false);
+  ovd::polygon_interior_filter pef(false);
+  vd.filter(&pef);
+  ovd::Offset ofs(g);
+  ts.scale(radius);
+  loops = ofs.offset(radius);
+  CPocket::InvScaleOVDOffsetLoops(loops, ts);
+  dprintf("radius: %g\n", radius);
+}
+
+void RoundOVDLoops(ovd::OffsetLoops& loops, double radius)
+{
+  OffsetOVDLoopsInward(loops, radius);
+  OffsetOVDLoopsOutward(loops, 2*radius);
+  OffsetOVDLoopsInward(loops, radius);
+}
+
+namespace gtl = boost::polygon;
+using namespace boost::polygon::operators;
+typedef gtl::polygon_with_holes_data<int> BoostPolygon;
+typedef gtl::polygon_traits<BoostPolygon>::point_type BoostPoint;
+typedef std::vector<BoostPoint> BoostPoints;
+typedef std::vector<BoostPolygon> BoostPolygons;
+
+namespace boost { namespace polygon {
+  /*
+  Register ovd:OffsetVertex as point concept mapping with boost polygon.
+  */
+  template <> struct geometry_concept<ovd::OffsetVertex> { typedef point_concept type; };
+  template <> struct point_traits<ovd::OffsetVertex> {
+    // FIXME: switch to double.
+    typedef int coordinate_type;
+    static inline coordinate_type get(const ovd::OffsetVertex& v, orientation_2d orient) {
+      if (orient == HORIZONTAL) return fabs(v.p.x);
+      else return fabs(v.p.y);
+    }
+  };
+  template <> struct point_mutable_traits<ovd::OffsetVertex> {
+    static inline void set(ovd::OffsetVertex& v, orientation_2d orient, int value) {
+      if (orient == HORIZONTAL) v.p.x = value;
+      else v.p.y = value;
+    }
+    static inline ovd::OffsetVertex construct(int x_value, int y_value) {
+      ovd::OffsetVertex v(ovd::Point(x_value, y_value));
+      return v;
+    }
+  };
+
+  /*
+  Register ovd:OffsetLoop as polygon_with_holes concept mapping with boost polygon.
+  */
+  template <> struct geometry_concept<ovd::OffsetLoop> { typedef polygon_concept type; };
+  template <> struct polygon_traits<ovd::OffsetLoop> {
+    // FIXME: switch to double.
+    typedef int coordinate_type;
+    typedef ovd::OffsetLoop::const_iterator iterator_type;
+    typedef ovd::OffsetVertex point_type;
+
+    static inline iterator_type begin_points(const ovd::OffsetLoop& l) { return l.begin(); }
+    static inline iterator_type end_points(const ovd::OffsetLoop& l) { return l.end(); }
+    static inline std::size_t size(const ovd::OffsetLoop& l) { return l.size(); }
+    static inline winding_direction winding(const ovd::OffsetLoop& l) { return unknown_winding; }
+  };
+  template <> struct polygon_mutable_traits<ovd::OffsetLoop> {
+    template <typename iT> static inline ovd::OffsetLoop& set_points(ovd::OffsetLoop& l, iT b, iT e) {
+      l.clear();
+      for (; b!=e; b++) {
+        l.push_back(ovd::OffsetVertex());
+        boost::polygon::assign(l.back(), *b);
+      }
+      return l;
+    }
+  };
+
+  /*
+  Register ovd:OffsetLoops as polygon_set concept mapping with boost polygon.
+  */
+  template <> struct geometry_concept<ovd::OffsetLoops> { typedef polygon_set_concept type; };
+  template <> struct polygon_set_traits<ovd::OffsetLoops> {
+    // FIXME: switch to double.
+    typedef int coordinate_type;
+    typedef ovd::OffsetLoops::const_iterator iterator_type;
+    typedef ovd::OffsetLoops operator_arg_type;
+    static inline iterator_type begin(const ovd::OffsetLoops& ls) { return ls.begin(); }
+    static inline iterator_type end(const ovd::OffsetLoops& ls) { return ls.end(); }
+    static inline bool clean(const ovd::OffsetLoops& ls) { return false; }
+    static inline bool sorted(const ovd::OffsetLoops& ls) { return false; }
+  };
+  template <> struct polygon_set_mutable_traits<ovd::OffsetLoops> {
+    template <typename iT> static inline void set(ovd::OffsetLoops& ls, iT b, iT e) {
+      ls.clear();
+      /*
+      Copy unknown input geometry into standard polygon set, then call get to
+      populate the OffsetLoops.
+      */
+      polygon_set_data<int> ps;
+      ps.insert(b, e);
+      ps.get(ls);
+      /*
+      May need to iterate through each polygon at this point and do something extra.
+      */
+    }
+  };
+}
+}
+
+struct NestedLoops {
+  enum OverlapType {
+    Inside,
+    Outside,
+    Disjoint,
+    Intersect,
+    OverlapTypeCount
+  };
+
+  std::list<NestedLoops> children;
+  ovd::OffsetLoops loops;
+  void insert(ovd::OffsetLoop &l);
+  void insert(ovd::OffsetLoops &ls);
+};
+
+void Detail(const ovd::OffsetVertex& v) {
+  cout << "    p:" << v.p << ", r:" << v.r << ", c:" << v.c << ", cw:" << v.cw << endl;
+}
+void Detail(const ovd::OffsetLoop& l) {
+  BOOST_FOREACH(ovd::OffsetVertex v, l) { Detail(v); }
+}
+void Detail(const ovd::OffsetLoops& ls) {
+  BOOST_FOREACH(ovd::OffsetLoop l, ls) {
+    dprintf("  loop:\n");
+    Detail(l);
+  }
+}
+void Detail(const NestedLoops& t) {
+  dprintf("loops:\n");
+  Detail(t.loops);
+  dprintf("children:\n");
+  BOOST_FOREACH(NestedLoops c, t.children) {
+    dprintf("child:\n");
+    Detail(c);
+  }
+}
+void Detail(const std::list<NestedLoops>& tl) {
+  dprintf("trees:\n");
+  BOOST_FOREACH(NestedLoops t, tl) {
+    dprintf("tree:\n");
+    Detail(t);
+  }
+}
+void Detail(const std::vector<NestedLoops>& tl) {
+  dprintf("trees:\n");
+  BOOST_FOREACH(NestedLoops t, tl) {
+    dprintf("tree:\n");
+    Detail(t);
+  }
+}
+
+
+template <typename T1, typename T2>
+NestedLoops::OverlapType GetOverlapType(const T1& a, const T2& b) {
+  {
+    /* Subtract b from a. If subtraction is empty, a is inside b. */
+    ovd::OffsetLoops c;
+    c += a;
+    c -= b;
+    if (c.empty()) return NestedLoops::Inside;
+  }
+  {
+    /* Similarly, subtract a from b. If subtraction is empty, a is outside b. */
+    ovd::OffsetLoops c;
+    c += b;
+    c -= a;
+    if (c.empty()) return NestedLoops::Outside;
+  }
+  {
+    /* Intersect a from b. If intersection is empty, a and b are disjoint. */
+    ovd::OffsetLoops c;
+    c += a;
+    c &= b;
+    if (c.empty()) return NestedLoops::Disjoint;
+  }
+  /* Otherwise, a and b intersect. */
+  return NestedLoops::Intersect;
+}
+
+void NestedLoops::insert(ovd::OffsetLoop& l) {
+  using namespace std;
+
+  vector<list<NestedLoops>::iterator> outside_of;
+  vector<list<NestedLoops>::iterator> intersects;
+
+  for (list<NestedLoops>::iterator i = children.begin(); i != children.end(); i++) {
+    switch (GetOverlapType(l, i->loops)) {
+    case Inside: { i->insert(l); return; }
+    case Outside: { outside_of.push_back(i); break; }
+    case Disjoint: { break; }
+    case Intersect: { intersects.push_back(i); break; }
+    default: { dprintf("Error: Unknown overlap type! continuing anyway ...\n"); break; }
+    }
+  }
+
+  /* Create new subtree corresponding to l. */
+  NestedLoops new_child;
+  new_child.loops += l;
+
+  /* Everything that l is outside of needs to moved into l's new subtree. */
+  for (vector<list<NestedLoops>::iterator>::iterator i = outside_of.begin(); i != outside_of.end(); i++) {
+    new_child.children.push_back(**i);
+    children.erase(*i);
+  }
+
+  /* Everything that l intersects needs to be combined with l. */
+  for (vector<list<NestedLoops>::iterator>::iterator i = intersects.begin(); i != intersects.end(); i++) {
+    new_child.loops += (*i)->loops;
+    children.erase(*i);
+  }
+
+  children.push_back(new_child);
+}
+
+void NestedLoops::insert(ovd::OffsetLoops& ls) {
+  BOOST_FOREACH (ovd::OffsetLoop l, ls) { insert(l); }
+}
+
+namespace boost { namespace polygon {
+  template <> struct geometry_concept<NestedLoops> {
+    typedef polygon_with_holes_concept type;
+    //typedef polygon_set_concept type;
+  };
+  template <> struct polygon_with_holes_traits<NestedLoops> {
+    typedef std::list<NestedLoops>::const_iterator iterator_holes_type;
+    typedef NestedLoops holes_type;
+    static inline iterator_holes_type begin_holes(const NestedLoops& t) { return t.children.begin(); }
+    static inline iterator_holes_type end_holes(const NestedLoops& t) { return t.children.end(); }
+    static inline unsigned int size_holes(const NestedLoops& t) { return t.children.size(); }
+  };
+  template <> struct polygon_with_holes_mutable_traits<NestedLoops> {
+    template <typename iT> static inline NestedLoops& set_holes(NestedLoops& t, iT b, iT e) {
+      t.children.clear();
+      for (; b!=e; b++) {
+       t.children.push_back(NestedLoops());
+       boost::polygon::assign(t.children.back(), *b);
+      }
+      return t;
+    }
+  };
+  //template <> struct polygon_set_traits<NestedLoops> {
+  //  typedef int coordinate_type;
+  //  typedef ovd::OffsetLoops::const_iterator iterator_type;
+  //  typedef ovd::OffsetLoops operator_arg_type;
+  //}
+}
+}
+
+struct NestedLoopIntersection;
+
+enum NestedLoopOverlapType {
+  NestedLoopInside,
+  NestedLoopOutside,
+  NestedLoopDisjoint,
+  NestedLoopIntersect,
+  NestedLoopOverlapTypeCount
+};
+
+struct OverlapCache {
+  typedef std::pair<unsigned int, unsigned int> cache_key_type;
+  typedef std::map<cache_key_type, NestedLoopOverlapType> cache_type;
+  typedef cache_type::iterator cache_iter;
+
+  cache_type cached_overlaps;
+
+  NestedLoopOverlapType get_overlap_type(const ovd::OffsetLoop& a, const ovd::OffsetLoop& b, unsigned int a_id, unsigned int b_id);
+};
+
+unsigned int ChecksumLoop(const ovd::OffsetLoop& l){
+    const unsigned int vertex_size = sizeof(ovd::OffsetVertex);
+    const unsigned int x_size = (sizeof(ovd::OffsetVertex)/sizeof(unsigned int)) + 1;
+    unsigned int x[x_size];
+    unsigned int checksum = 0;
+    BOOST_FOREACH(ovd::OffsetVertex v, l) {
+        for (unsigned int i=0; i<x_size; i++){
+            x[i] = 0;
+        }
+        memcpy(x, &v, vertex_size);
+        for (unsigned int i=0; i<x_size; i++){
+            checksum ^= x[i];
+        }
+    }
+    dprintf("checksum: %d\n", checksum);
+    return checksum;
+}
+
+NestedLoopOverlapType OverlapCache::get_overlap_type(const ovd::OffsetLoop& a, const ovd::OffsetLoop& b, unsigned int a_id, unsigned int b_id) {
+  NestedLoopOverlapType overlap_type;
+  //cache_key_type cache_key(ChecksumLoop(a),ChecksumLoop(b));
+  cache_key_type cache_key(a_id, b_id);
+  cache_iter it(cached_overlaps.find(cache_key));
+  if (it == cached_overlaps.end()) {
+    dprintf("cache miss: a_id: %u, b_id: %u\n", a_id, b_id);
+    ovd::OffsetLoops c;
+
+    /*
+    Subtract b from a. If subtraction is empty, a is inside b.
+    */
+    c.clear();
+    c += a;
+    c -= b;
+    if (c.empty()) { overlap_type = NestedLoopInside; }
+    else {
+      /*
+      Similarly, subtract a from b. If subtraction is empty, a is outside b.
+      */
+      c.clear();
+      c += b;
+      c -= a;
+      if (c.empty()) { overlap_type = NestedLoopOutside; }
+      else {
+        /*
+        Intersect a and b. If intersection is empty, a and b are disjoint.
+        */
+        c.clear();
+        c += a;
+        c &= b;
+        if (c.empty()) { overlap_type = NestedLoopDisjoint; }
+        else {
+          /*
+          Otherwise, a and b intersect.
+          */
+          overlap_type = NestedLoopIntersect;
+        }
+      }
+    }
+
+    cached_overlaps[cache_key] = overlap_type;
+  } else {
+    dprintf("cache hit: a_id: %u, b_id: %u\n", a_id, b_id);
+    overlap_type = cached_overlaps[cache_key];
+  }
+  return overlap_type;
+}
+
+struct NestedLoop {
+
+  std::list<NestedLoop> children;
+  std::list<NestedLoopIntersection> intersections;
+  ovd::OffsetLoop loop;
+  unsigned int loop_id;
+  OverlapCache overlap_cache;
+
+  void insert(ovd::OffsetLoop &l, OverlapCache &overlaps, unsigned int loop_id);
+  void insert(ovd::OffsetLoops &ls);
+};
+
+struct NestedLoopIntersection {
+  NestedLoop& a, b;
+  NestedLoopIntersection(NestedLoop& _a, NestedLoop& _b): a(_a), b(_b) {}
+};
+
+void Detail(const NestedLoopIntersection& i);
+void Detail(const NestedLoop& t) {
+  dprintf("loop:\n");
+  Detail(t.loop);
+  int num_children = t.children.size();
+  int child_num = 0;
+  dprintf("%d children:\n", num_children);
+  BOOST_FOREACH(NestedLoop c, t.children) {
+    child_num++;
+    dprintf("(child %d/%d):\n", child_num, num_children);
+    Detail(c);
+  }
+  int num_intersections = t.intersections.size();
+  int intersection_num = 0;
+  dprintf("%d intersections:\n", num_intersections);
+  BOOST_FOREACH(NestedLoopIntersection x, t.intersections) {
+    intersection_num++;
+    dprintf("(intersection %d/%d):\n", intersection_num, num_intersections);
+    Detail(x);
+  }
+}
+void Detail(const NestedLoopIntersection& i) {
+  dprintf("a:\n");
+  Detail(i.a);
+  dprintf("b:\n");
+  Detail(i.b);
+}
+void Detail(const std::list<NestedLoop>& tl) {
+  int num_trees = tl.size();
+  int tree_num = 0;
+  dprintf("%d trees:\n", num_trees);
+  BOOST_FOREACH(NestedLoop t, tl) {
+    tree_num++;
+    dprintf("(tree %d/%d):\n", tree_num, num_trees);
+    Detail(t);
+  }
+}
+void Detail(const std::vector<NestedLoop>& tl) {
+  int num_trees = tl.size();
+  int tree_num = 0;
+  dprintf("%d trees:\n", num_trees);
+  BOOST_FOREACH(NestedLoop t, tl) {
+    tree_num++;
+    dprintf("(tree %d/%d):\n", tree_num, num_trees);
+    Detail(t);
+  }
+}
+
+
+template <typename T1, typename T2>
+NestedLoopOverlapType GetOverlapType2(const T1& a, const T2& b) {
+  {
+    /* Subtract b from a. If subtraction is empty, a is inside b. */
+    ovd::OffsetLoops c;
+    c += a;
+    c -= b;
+    if (c.empty()) return NestedLoopInside;
+  }
+  {
+    /* Similarly, subtract a from b. If subtraction is empty, a is outside b. */
+    ovd::OffsetLoops c;
+    c += b;
+    c -= a;
+    if (c.empty()) return NestedLoopOutside;
+  }
+  {
+    /* Intersect a from b. If intersection is empty, a and b are disjoint. */
+    ovd::OffsetLoops c;
+    c += a;
+    c &= b;
+    if (c.empty()) return NestedLoopDisjoint;
+  }
+  /* Otherwise, a and b intersect. */
+  return NestedLoopIntersect;
+}
+
+void NestedLoop::insert(ovd::OffsetLoop& l, OverlapCache &overlaps, unsigned int id) {
+  using namespace std;
+
+  vector<list<NestedLoop>::iterator> outside_of;
+  vector<list<NestedLoop>::iterator> intersects;
+
+  for (list<NestedLoop>::iterator i = children.begin(); i != children.end(); i++) {
+    switch (GetOverlapType2(l, i->loop)) {
+    //switch (overlaps.get_overlap_type(l, i->loop)) {
+    //switch (overlaps.get_overlap_type(l, i->loop, id, i->loop_id)) {
+    case NestedLoopInside: { i->insert(l, overlaps, id); return; }
+    case NestedLoopOutside: { outside_of.push_back(i); break; }
+    case NestedLoopDisjoint: { break; }
+    case NestedLoopIntersect: { intersects.push_back(i); break; }
+    default: { dprintf("Error: Unknown overlap type! continuing anyway ...\n"); break; }
+    }
+  }
+
+  /* Create new subtree corresponding to l. */
+  NestedLoop new_child;
+  new_child.loop = l;
+  new_child.loop_id = id;
+
+  /* Everything that l is outside of needs to moved into l's new subtree. */
+  for (vector<list<NestedLoop>::iterator>::iterator i = outside_of.begin(); i != outside_of.end(); i++) {
+    new_child.children.push_back(**i);
+    children.erase(*i);
+  }
+
+  /*
+  Recording everything that intersects with l.  Note: this code point won't be
+  reached if l in inside of an existing child, because that child becomes l's
+  parent. That's okay, because in that if l intersect with with another child
+  'C', then l's parent must also intersect with C, and that intersection should
+  be already recorded.
+  */
+  for (vector<list<NestedLoop>::iterator>::iterator i = intersects.begin(); i != intersects.end(); i++) {
+    intersections.push_back(NestedLoopIntersection(new_child, **i));
+  }
+
+  children.push_back(new_child);
+}
+
+void NestedLoop::insert(ovd::OffsetLoops& ls) {
+  unsigned int loop_id = 0;
+  BOOST_FOREACH (ovd::OffsetLoop l, ls) { insert(l, overlap_cache, loop_id++); }
+}
+
+namespace boost { namespace polygon {
+  template <> struct geometry_concept<NestedLoop> {
+    typedef polygon_with_holes_concept type;
+  };
+  template <> struct polygon_traits<NestedLoop> {
+    typedef int coordinate_type;
+    typedef ovd::OffsetLoop::const_iterator iterator_type;
+    typedef ovd::OffsetVertex point_type;
+
+    static inline iterator_type begin_points(const NestedLoop& t) { return t.loop.begin(); }
+    static inline iterator_type end_points(const NestedLoop& t) { return t.loop.end(); }
+    static inline std::size_t size(const NestedLoop& t) { return t.loop.size(); }
+    static inline winding_direction winding(const NestedLoop& t) { return unknown_winding; }
+  };
+  template <> struct polygon_mutable_traits<NestedLoop> {
+    template <typename iT> static inline NestedLoop& set_points(NestedLoop& t, iT b, iT e) {
+      t.loop.clear();
+      for (; b!=e; b++) {
+        t.loop.push_back(ovd::OffsetVertex());
+        boost::polygon::assign(t.loop.back(), *b);
+      }
+      return t;
+    }
+  };
+  template <> struct polygon_with_holes_traits<NestedLoop> {
+    typedef std::list<NestedLoop>::const_iterator iterator_holes_type;
+    typedef NestedLoop holes_type;
+
+    static inline iterator_holes_type begin_holes(const NestedLoop& t) { return t.children.begin(); }
+    static inline iterator_holes_type end_holes(const NestedLoop& t) { return t.children.end(); }
+    static inline unsigned int size_holes(const NestedLoop& t) { return t.children.size(); }
+  };
+  template <> struct polygon_with_holes_mutable_traits<NestedLoop> {
+    template <typename iT> static inline NestedLoop& set_holes(NestedLoop& t, iT b, iT e) {
+      t.children.clear();
+      for (; b!=e; b++) {
+       t.children.push_back(NestedLoop());
+       boost::polygon::assign(t.children.back(), *b);
+      }
+      return t;
+    }
+  };
+}
+}
+
 Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
 {
     Python python;
 
-	ReloadPointers();
+    ReloadPointers();
 
-	python << CDepthOp::AppendTextToProgram( pMachineState );
+    python << CDepthOp::AppendTextToProgram( pMachineState );
+
+    bool enable_clearance_pocketing;
+    bool enable_corner_pocketing;
+    bool enable_wall_chamfering;
+    bool enable_medial_axis;
+    double chamfering_flat_radius;
+    double chamfering_edge_angle;
+    double chamfering_edge_height;
+    double pocketing_flat_radius;
+    double pocketing_step_down;
+    double start_depth;
+    double final_depth;
+    double inlay_plane_depth;
+    double delta_depth;
+    double peak_trough_tolerance;
+    double chamfering_step_down;
+    double rapid_safety_space;
+    double clearance_height;
+    double tan_theta;
+    double cot_theta;
+
+    double chamfering_step_over;
+    double outer_pocketing_step_over;
+    double pocketing_step_over;
 
     // Sanity checks:
     // - Depths:
     //   - Verify: start_depth is above inlay_plane_depth.
     //   - Verify: final_depth is below inlay_plane_depth.
-    //   - Verify: chamfering_step_down <= chamfering cutting_edge_height.
-    //   - Define: chamfering_step_over := tan(theta)*chamfering_step_down.
+    //   - Verify: chamfering_edge_height <= chamfering cutting_edge_height.
+    //   - Define: chamfering_step_over := tan(theta)*chamfering_edge_height.
     //   - Verify: chamfering_step_over < (chamfering diameter/2.) - chamfering flat_radius
     //   - Verify: clearing_step_down <= clearing cutting_edge_height.
     //   - Verify: clearing_step_over < clearing flat_radius (== clearing diameter/2.).
@@ -416,168 +1463,992 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
     //     work for bits with corner radius of zero (i.e., endmills and
     //     chamfering bits).
 
+    enable_clearance_pocketing = m_params.m_enable_clearance_pocketing;
+    enable_corner_pocketing = m_params.m_enable_corner_pocketing;
+    enable_wall_chamfering = m_params.m_enable_wall_chamfering;
+    enable_medial_axis = m_params.m_enable_medial_axis;
+
     // Ideally, the chamfering bit has a sharp-pointed end, i.e., has flat
     // radius of zero. If it lacks a center point, i.e., has a positive flat
     // radius, we need to round the corners of sketches accordingly.
-	CTool *chamfering_bit = CTool::Find(m_tool_number);
-	if (! chamfering_bit) {
-        // Error and exit. Use message box.
-		printf("No chamfering bit defined\n");
-		return(python);
-	}
-	CTool *clearance_bit = CTool::Find(m_params.m_clearance_tool);
-	if (! clearance_bit) {
-        // Error and exit. Use message box.
-		printf("No clearance bit defined\n");
-		return(python);
-	}
-	std::list<HeeksObj *> sketches(GetChildren());
-    double flat_radius = chamfering_bit->m_params.m_flat_radius;
-    double cutting_edge_angle = chamfering_bit->m_params.m_cutting_edge_angle;
-    double chamfering_step_down = chamfering_bit->m_params.m_cutting_edge_height;
-    double start_depth = m_depth_op_params.m_start_depth;
-    double final_depth = m_depth_op_params.m_final_depth;
-    double delta_depth = (final_depth - start_depth); // negative since final_depth < start_depth
-    double step_down = m_depth_op_params.m_step_down;
-    double rapid_safety_space = m_depth_op_params.m_rapid_safety_space;
-    double clearance_height = m_depth_op_params.ClearanceHeight();
-    double tan_theta;
-    double cot_theta;
+    CTool *chamfering_bit = CTool::Find(m_tool_number);
+    if (! chamfering_bit) {
+      // Error and exit. Use message box.
+      wxMessageBox(_T("Cannot generate GCode for inlay without a chamfer tool assigned. To fix, edit the 'tool' property of the Inlay."));
+      return(python);
+    }
+    chamfering_flat_radius = chamfering_bit->m_params.m_flat_radius;
+    chamfering_edge_angle = chamfering_bit->m_params.m_cutting_edge_angle;
+    chamfering_edge_height = chamfering_bit->m_params.m_cutting_edge_height;
 
-    if (0. < flat_radius){
-        // RoundCorners(sketches, pMachineState);
-        // - Convert sketches to CArea object.
-        // - Outset, Inset, Outset
-        // - Convert area to sketches.
+    CTool *clearance_bit = CTool::Find(m_params.m_clearance_tool);
+    if (enable_clearance_pocketing && (!clearance_bit)) {
+      // Error and exit. Use message box.
+      wxMessageBox(_T("Cannot generate GCode for inlay clearance pocketing without a clearance tool assigned. To fix, edit the 'Clearance Tool' property of the Inlay."));
+      return(python);
+    } else {
+      pocketing_flat_radius = clearance_bit->m_params.m_flat_radius;
+      pocketing_step_over = pocketing_flat_radius;
+      outer_pocketing_step_over = pocketing_step_over;
     }
 
-    if (0. == cutting_edge_angle){
-        // For now: error and exit. Use message box.
 
-        // Eventually, standard pocketing operations. For now, only handle
-        // positive cutting_edge_angle, i.e., chamfering bits.
+    start_depth = m_depth_op_params.m_start_depth;
+    final_depth = m_depth_op_params.m_final_depth;
+    inlay_plane_depth = m_params.m_inlay_plane_depth;
+    delta_depth = (final_depth - start_depth); // negative since final_depth < start_depth
+    if (start_depth < inlay_plane_depth) {
+      wxMessageBox(_T("Inlay plane is above the top of the material. To fix, set the 'Inlay Plane Depth' property to a height of at most the 'start depth' property of the Inlay."));
+      return(python);
+    }
+
+    if (inlay_plane_depth < final_depth) {
+      wxMessageBox(_T("Inlay plane is below the final depth of the Inlay operation. To fix, set the 'Inlay Plane Depth' property to a height of at least the 'final depth' property of the Inlay."));
+      return(python);
+    }
+
+    chamfering_step_down = m_depth_op_params.m_step_down;
+    pocketing_step_down = chamfering_step_down;
+    if (enable_wall_chamfering && (chamfering_edge_height < chamfering_step_down)) {
+      wxMessageBox(_T("The 'step-down' distance is larger than the height of the chamfer bit's flutes, which would cause inlay wall-chamfering to fail. To fix, set the 'step down' property property of the Inlay to a distance no greater than the chamfer bit's cutting height."));
+      return(python);
+    }
+
+    rapid_safety_space = m_depth_op_params.m_rapid_safety_space;
+    clearance_height = m_depth_op_params.ClearanceHeight();
+    if (rapid_safety_space <= 0) {
+      wxMessageBox(_T("The rapid safety space should be positive to prevent the bit from rapidly plunging into the material. To fix, set the 'rapid safety space' property property of the Inlay to a positive height."));
+      return(python);
+    }
+    if (clearance_height <= start_depth) {
+      wxMessageBox(_T("The clearance height space should be positive to prevent the bit from crashing into the material or clamps. To fix, set the 'clearance height ' property property of the Inlay to a positive height."));
+      return(python);
+    }
+
+    if (enable_corner_pocketing) {
+      peak_trough_tolerance = m_params.m_peak_trough_tolerance;
+    }
+
+    //std::list<HeeksObj *> sketches(GetChildren());
+    if (0. < chamfering_flat_radius){
+      // RoundCorners(sketches, pMachineState);
+      // - Convert sketches to CArea object.
+      // - Outset, Inset, Outset
+      // - Convert area to sketches.
+    }
+
+    if (0. == chamfering_edge_angle){
+      // For now: error and exit. Use message box.
+      // Error and exit. Use message box.
+	  wxMessageBox(_T("The inlay operation currenly requires an angled chamfering bit for corner-pocketing, wall-chamfering, and medial-axis GCode, but the specified chamfering bit has zero angle."));
+	  return(python);
+
+      // Eventually, standard pocketing operations. For now, only handle
+      // positive chamfering_edge_angle, i.e., chamfering bits.
     } else {
-        tan_theta = tan(cutting_edge_angle * 3.141592653589793 / 180.);
-        cot_theta = 1./tan_theta;
-        // Inlay operations.
-        // - Compute female and male versions of the following.
-        //   - Whether to perform for male, female, or both depends on "pass".
-        // - For female:
-        //   - depth array:
-        //     - size n of array = quotient of (start_depth -
-        //       final_depth)/chamfering_step_down.
-        //     - depth[i] should be (start_depth - i*chamfering_step_down).
-        //     - if remainder of (start_depth -
-        //       final_depth)/chamfering_step_down is positive, set depth[n] =
-        //       final_depth, and increment n.
-        //   - wall_offset array:
-        //     - same size as depth array.
-        //     - wall_offset[i] should be chamfering_flat_radius + tan(theta) *
-        //       (inlay_plane_depth - depth[i]).
-        //   - Wall milling skips depth[0] and wall_offset[0]; it starts at depth[1]
-        //     and wall_offset[1].
-        //   - Pocket offset array:
-        //     - same size as depth array.
-        //     - pocket_offset[i] should be pocketing_flat_radius + tan(theta)
-        //       * (inlay_plane_depth - depth[i]).
-        //   - Pocket milling skips depth[0] and pocket_offset[0]; it starts at
-        //     depth[1] and pocket_offset[1].
-        // - For male:
-        //   - depth array: identical to that computed for female.
-        //   - wall_offset array:
-        //     - same size as depth array.
-        //     - wall_offset[i] should be chamfering_flat_radius + tan(theta) *
-        //       (tolerance_depth + inlay_plane_depth - depth[i]).
-        //   - Wall milling skips depth[0] and wall_offset[0]; it starts at depth[1]
-        //     and wall_offset[1].
-        //   - Pocket offset array:
-        //     - same size as depth array.
-        //     - pocket_offset[i] should be pocketing_flat_radius + tan(theta)
-        //       * (tolerance_depth + inlay_plane_depth - depth[i]).
-        //   - Pocket milling skips depth[0] and pocket_offset[0]; it starts at
-        //     depth[1] and pocket_offset[1].
-        // - Wall operations.
-        //   - First wall area is offset such that conical cuts touch the
-        //     (possibly rounded) sketch at inlay_plane_depth, with the
-        //     exception of rounded corners that will be sharpened in the
-        //     medial-axis walk.
-        //   - Iterate through depth and wall_offset arrays, starting at index
-        //     1 (i.e., skipping index 0).
-        //     - The offset path at index 0 will be skipped.
-        //     - The offset path at index i will have depth of depth[i].
-        //     - In OpenVoronoi, each negative offset must be computed using
-        //       the PolygonExterior filter with the absolute value of the
-        //       offset.
-        //     - In OpenVoronoi, each positive offset must be computed using
-        //       the PolygonInterior filter with the absolute value of the
-        //       offset.
-        // - Pocketing operations.
-        //   - Iterate through depth and pocket_offset arrays, starting at
-        //     index 1 (i.e., skipping index 0).
-        //     - The pocket path at index 0 will be skipped.
-        //     - The pocket path at index i will have depth of depth[i].
-        //     - The pocketing path at index i will consist of the slice
-        //       pocket_offset[i:], iterating from last to first in the slice.
-        //     - In OpenVoronoi, each negative offset must be computed using
-        //       the PolygonExterior filter with the absolute value of the
-        //       offset.
-        //     - In OpenVoronoi, each positive offset must be computed using
-        //       the PolygonInterior filter with the absolute value of the
-        //       offset.
-        // - Corner pocketing operations.
-        //   - These regions will be pocketed using the chamfering bit. The tip
-        //     of the bit will reach the end of the trough or peak. The
-        //     effective_radius is computed at tolerance_depth distance from
-        //     the end of the trough or peak.  This should leave small ridges
-        //     in the corner area, whose height equals the tolerance_depth.
-        //   - The effective_radius := chamfering_flat_radius + tan(theta) *
-        //     tolerance_depth.
-        //   - This requires computation of (last_wall_offset) -
-        //     (last_pocket_offset).
-        //   - The final wall-cleared region is the final wall_offset_path,
-        //     inset by the effective_radius.
-        //   - The final pocket-cleared region is the final pocket_offset_path,
-        //     outset by pocketing bit's flat_radius.
-        //   - Subtracting the final pocket-cleared regions from the final
-        //     wall-cleared regions gives the corner-pocket regions.
-        //   - Each corner-pocket region will be pocketed separately.
-        //   - The corner-pocket step_over will not equal the effective_radius!
-        //   - Instead, it will be set to exactly equal the effective_diameter,
-        //     or two times the effective_radius.
-        //   - TODO: provide illustration.
-        // - Medial axis operations.
-        //   - This should computed for wall_offset[0].
-        //   - Each segment should be examined.
-        //     - Depths should be set to start_depth -
-        //     clearance_radius*cot(theta).
-        //     - If either end of the segment has depth above final_depth, it
-        //       should be rendered at least partially.
-        //       - If one end is below final depth, segment should be only
-        //         partially rendered, up to the point on the segment whose
-        //         depth equals final_depth.
-        // - Order female and/or male versions of operations as follows:
-        //   - Whether male or female is first depends on
-        //     "female_before_male_fixtures".
-        //   - 
+      tan_theta = tan(chamfering_edge_angle * 3.141592653589793 / 180.);
+      cot_theta = 1./tan_theta;
+      chamfering_step_over = chamfering_step_down * tan_theta;
+      if (chamfering_step_over < outer_pocketing_step_over) {
+        outer_pocketing_step_over = chamfering_step_over;
+      }
+
+      std::list<HeeksObj *> children(GetChildren());
+      TranslateScale ts;
+      ovd::VoronoiDiagram vd(2.,100);
+      dprintf("... OpenVoronoi version: %s\n", ovd::version().c_str());
+
+      ovd::polygon_interior_filter pef(false);
+      ovd::polygon_interior_filter pif(true);
+      ovd::medial_axis_filter maf(0.8);
+
+      dprintf("Converting sketches to OVD ...\n");
+      ovd::OffsetLoops original_loops;
+      CPocket::ConvertSketchesToOVDOffsetLoops(children, original_loops, pMachineState);
+      CPocket::GetOVDOffsetLoopsScaling(original_loops, ts);
+      CPocket::ScaleOVDOffsetLoops(original_loops, ts);
+      CPocket::AddOffsetLoopsToOVD(vd, original_loops);
+
+      dprintf("... Done converting sketches to OVD.\n");
+      double scaled_chamfering_step_over = chamfering_step_over;
+      ts.scale(scaled_chamfering_step_over);
+
+      dprintf("vd.get_graph_reference() ...\n");
+      ovd::HEGraph& g = vd.get_graph_reference();
+
+      // Inlay operations.
+      // - Compute female and male versions of the following.
+      //   - Whether to perform for male, female, or both depends on "pass".
+      // - For female:
+      //   - depth array:
+      //     - size n of array = quotient of (start_depth -
+      //       final_depth)/chamfering_edge_height.
+      //     - depth[i] should be (start_depth - i*chamfering_edge_height).
+      //     - if remainder of (start_depth -
+      //       final_depth)/chamfering_edge_height is positive, set depth[n] =
+      //       final_depth, and increment n.
+      //   - wall_offset array:
+      //     - same size as depth array.
+      //     - wall_offset[i] should be chamfering_flat_radius + tan(theta) *
+      //       (inlay_plane_depth - depth[i]).
+      //   - Wall milling skips depth[0] and wall_offset[0]; it starts at depth[1]
+      //     and wall_offset[1].
+
+      //double starting_wall_offset = chamfering_flat_radius;
+      //if (inlay_plane_depth < start_depth) {
+      //    starting_wall_offset = chamfering_flat_radius + (inlay_plane_depth - start_depth)*tan_theta;
+      //}
+      //dprintf("starting_wall_offset: %g...\n", starting_wall_offset);
+
+      ovd::OffsetLoops loops;
+      ovd::Offset ofs(g);
+
+      std::vector<double> wall_depths_array;
+      std::vector<double> wall_offsets_array;
+      std::vector<double> scaled_wall_offsets_array;
+      std::vector<ovd::OffsetLoops> wall_loop_array;
+      double wall_depth = start_depth;
+      double wall_offset = chamfering_flat_radius + (inlay_plane_depth - wall_depth)*tan_theta;
+
+      // The bottom wall chamfer offset is also used to compute toolpaths for corner pocketing.
+      double bottom_wall_offset = chamfering_flat_radius + (inlay_plane_depth - final_depth)*tan_theta;
+      double scaled_wall_offset = bottom_wall_offset;
+      ovd::OffsetLoops bottom_wall_loops;
+
+      if (enable_wall_chamfering || enable_corner_pocketing) {
+        vd.filter_reset();
+        vd.filter(&pif);
+        ts.scale(scaled_wall_offset);
+        dprintf("bottom_wall_offset: %g\n", bottom_wall_offset);
+        dprintf("scaled_wall_offset: %g\n", scaled_wall_offset);
+        bottom_wall_loops = ofs.offset(scaled_wall_offset);
+      }
+
+      if (enable_wall_chamfering) {
+        vd.filter_reset();
+        vd.filter(&pef);
+
+        while (wall_offset <= 0.) {
+            scaled_wall_offset = wall_offset;
+            ts.scale(scaled_wall_offset);
+
+            // When 0 == scaled_wall_offset, push_back the original loops.
+            if (0 == scaled_wall_offset) { loops = original_loops; }
+            else { loops = ofs.offset(-scaled_wall_offset); }
+            // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+            if (0 == loops.size()) { break; }
+
+            wall_offsets_array.push_back(wall_offset);
+            scaled_wall_offsets_array.push_back(scaled_wall_offset);
+            wall_loop_array.push_back(loops);
+            if (final_depth < wall_depth) { wall_depths_array.push_back(wall_depth); }
+
+            wall_depth -= chamfering_step_down;
+            wall_offset = chamfering_flat_radius + (inlay_plane_depth - wall_depth)*tan_theta;
+        }
+
+        vd.filter_reset();
+        //ovd::PolygonInterior(g, true);
+        vd.filter(&pif);
+
+        while (true) {
+            scaled_wall_offset = wall_offset;
+            ts.scale(scaled_wall_offset);
+
+            // When 0 == scaled_wall_offset, push_back the original loops.
+            if (0 == scaled_wall_offset) { loops = original_loops; }
+            else { loops = ofs.offset(scaled_wall_offset); }
+            // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+            if (0 == loops.size()) { break; }
+
+            wall_offsets_array.push_back(wall_offset);
+            scaled_wall_offsets_array.push_back(scaled_wall_offset);
+            wall_loop_array.push_back(loops);
+            if (final_depth < wall_depth) { wall_depths_array.push_back(wall_depth); }
+
+            wall_depth -= chamfering_step_down;
+            wall_offset = chamfering_flat_radius + (inlay_plane_depth - wall_depth)*tan_theta;
+        }
+      }
+
+      //   - Pocket offset array:
+      //     - same size as depth array.
+      //     - pocket_offset[i] should be pocketing_flat_radius + tan(theta)
+      //       * (inlay_plane_depth - depth[i]).
+      //   - Pocket milling skips depth[0] and pocket_offset[0]; it starts at
+      //     depth[1] and pocket_offset[1].
+
+      std::vector<double> pocket_depths_array;
+      std::vector<double> pocket_offsets_array;
+      std::vector<double> scaled_pocket_offsets_array;
+      std::vector<ovd::OffsetLoops> pocket_loop_array;
+
+      // The bottom clearance pocket offset is also used to compute toolpaths for corner pocketing.
+      double bottom_pocket_offset = pocketing_flat_radius + (inlay_plane_depth - final_depth)*tan_theta;
+      double scaled_pocket_offset = bottom_pocket_offset;
+      ovd::OffsetLoops bottom_pocket_loops;
+
+
+      if (enable_clearance_pocketing || enable_corner_pocketing) {
+        vd.filter_reset();
+        //ovd::PolygonInterior(g, true);
+        vd.filter(&pif);
+        ts.scale(scaled_pocket_offset);
+        dprintf("bottom_pocket_offset: %g\n", bottom_pocket_offset);
+        dprintf("scaled_pocket_offset: %g\n", scaled_pocket_offset);
+        bottom_pocket_loops = ofs.offset(scaled_pocket_offset);
+      }
+
+      if (enable_clearance_pocketing) {
+        double pocket_depth = start_depth;
+        double pocket_offset = pocketing_flat_radius + (inlay_plane_depth - pocket_depth)*tan_theta;
+        vd.filter_reset();
+        //ovd::PolygonInterior(g, false);
+        vd.filter(&pef);
+
+        while (pocket_offset <= 0.) {
+          scaled_pocket_offset = pocket_offset;
+          ts.scale(scaled_pocket_offset);
+
+          // When 0 == scaled_pocket_offset, push_back the original loops.
+          if (0 == scaled_pocket_offset) { loops = original_loops; }
+          else { loops = ofs.offset(-scaled_pocket_offset); }
+          // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+          if (0 == loops.size()) { break; }
+
+          pocket_offsets_array.push_back(pocket_offset);
+          scaled_pocket_offsets_array.push_back(scaled_pocket_offset);
+          pocket_loop_array.push_back(loops);
+
+          if (final_depth < pocket_depth) { pocket_depths_array.push_back(pocket_depth); }
+
+          pocket_depth -= pocketing_step_down;
+          pocket_offset = pocketing_flat_radius + (inlay_plane_depth - pocket_depth)*tan_theta;
+        }
+
+        vd.filter_reset();
+        //ovd::PolygonInterior(g, true);
+        vd.filter(&pif);
+
+        while (final_depth <= pocket_depth) {
+          scaled_pocket_offset = pocket_offset;
+          ts.scale(scaled_pocket_offset);
+
+          // When 0 == scaled_pocket_offset, push_back the original loops.
+          if (0 == scaled_pocket_offset) { loops = original_loops; }
+          else { loops = ofs.offset(scaled_pocket_offset); }
+          // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+          if (0 == loops.size()) { break; }
+
+          pocket_offsets_array.push_back(pocket_offset);
+          scaled_pocket_offsets_array.push_back(scaled_pocket_offset);
+          pocket_loop_array.push_back(loops);
+          pocket_depths_array.push_back(pocket_depth);
+
+          pocket_depth -= pocketing_step_down;
+          pocket_offset = pocketing_flat_radius + (inlay_plane_depth - pocket_depth)*tan_theta;
+        }
+
+        if (final_depth != pocket_depth) {
+          pocket_depth = final_depth;
+          pocket_offset = bottom_pocket_offset;
+          scaled_pocket_offset = pocket_offset;
+          ts.scale(scaled_pocket_offset);
+          loops = bottom_pocket_loops;
+
+          pocket_offsets_array.push_back(pocket_offset);
+          scaled_pocket_offsets_array.push_back(scaled_pocket_offset);
+          pocket_loop_array.push_back(loops);
+          pocket_depths_array.push_back(pocket_depth);
+        }
+
+        // Since we're reusing these clearance pockets at each depth, and
+        // at each depth our outer loop is a little smaller than the
+        // previous, we need to make sure that these outer loops reach
+        // the walls, so each outer loops can only step over a little
+        // bit. Once we're done with these outer loops, the inner loops
+        // can step over by a larger amount.
+        pocket_offset += pocketing_step_over;
+        while (true) {
+          scaled_pocket_offset = pocket_offset;
+          ts.scale(scaled_pocket_offset);
+
+          // When 0 == scaled_pocket_offset, push_back the original loops.
+          if (0 == scaled_pocket_offset) { loops = original_loops; }
+          else { loops = ofs.offset(scaled_pocket_offset); }
+          // Break-out of loop when nonzero offset has grown too large to draw any offset loops.
+          if (0 == loops.size()) { break; }
+
+          pocket_offsets_array.push_back(pocket_offset);
+          scaled_pocket_offsets_array.push_back(scaled_pocket_offset);
+          pocket_loop_array.push_back(loops);
+
+          pocket_offset += pocketing_step_over;
+        }
+      }
+
+      //dprintf("vd.filter_reset()...\n");
+      //vd.filter_reset();
+      //dprintf("...vd.filter_reset() done.\n");
+      //dprintf("PolygonExterior() ...\n");
+      //ovd::PolygonExterior(g, true);
+      //dprintf("...PolygonExterior() done.\n");
+
+      //double starting_pocket_offset = chamfering_flat_radius;
+
+      // - For male:
+      //   - depth array: identical to that computed for female.
+      //   - wall_offset array:
+      //     - same size as depth array.
+      //     - wall_offset[i] should be chamfering_flat_radius + tan(theta) *
+      //       (tolerance_depth + inlay_plane_depth - depth[i]).
+      //   - Wall milling skips depth[0] and wall_offset[0]; it starts at depth[1]
+      //     and wall_offset[1].
+      //   - Pocket offset array:
+      //     - same size as depth array.
+      //     - pocket_offset[i] should be pocketing_flat_radius + tan(theta)
+      //       * (tolerance_depth + inlay_plane_depth - depth[i]).
+      //   - Pocket milling skips depth[0] and pocket_offset[0]; it starts at
+      //     depth[1] and pocket_offset[1].
+      // - Wall operations.
+      //   - First wall area is offset such that conical cuts touch the
+      //     (possibly rounded) sketch at inlay_plane_depth, with the
+      //     exception of rounded corners that will be sharpened in the
+      //     medial-axis walk.
+      //   - Iterate through depth and wall_offset arrays, starting at index
+      //     1 (i.e., skipping index 0).
+      //     - The offset path at index 0 will be skipped.
+      //     - The offset path at index i will have depth of depth[i].
+      //     - In OpenVoronoi, each negative offset must be computed using
+      //       the PolygonExterior filter with the absolute value of the
+      //       offset.
+      //     - In OpenVoronoi, each positive offset must be computed using
+      //       the PolygonInterior filter with the absolute value of the
+      //       offset.
+      // - Pocketing operations.
+      //   - Iterate through depth and pocket_offset arrays, starting at
+      //     index 1 (i.e., skipping index 0).
+      //     - The pocket path at index 0 will be skipped.
+      //     - The pocket path at index i will have depth of depth[i].
+      //     - The pocketing path at index i will consist of the slice
+      //       pocket_offset[i:], iterating from last to first in the slice.
+      //     - In OpenVoronoi, each negative offset must be computed using
+      //       the PolygonExterior filter with the absolute value of the
+      //       offset.
+      //     - In OpenVoronoi, each positive offset must be computed using
+      //       the PolygonInterior filter with the absolute value of the
+      //       offset.
+      // - Corner pocketing operations.
+      //   - These regions will be pocketed using the chamfering bit. The tip
+      //     of the bit will reach the end of the trough or peak. The
+      //     effective_radius is computed at tolerance_depth distance from
+      //     the end of the trough or peak.  This should leave small ridges
+      //     in the corner area, whose height equals the tolerance_depth.
+      //   - The effective_radius := chamfering_flat_radius + tan(theta) *
+      //     tolerance_depth.
+      //   - This requires computation of (last_wall_offset) -
+      //     (last_pocket_offset).
+      //   - The final wall-cleared region is the final wall_offset_path,
+      //     inset by the effective_radius.
+      //   - The final pocket-cleared region is the final pocket_offset_path,
+      //     outset by pocketing bit's flat_radius.
+      //   - Subtracting the final pocket-cleared regions from the final
+      //     wall-cleared regions gives the corner-pocket regions.
+      //   - Each corner-pocket region will be pocketed separately.
+      //   - The corner-pocket step_over will not equal the effective_radius!
+      //   - Instead, it will be set to exactly equal the effective_diameter,
+      //     or two times the effective_radius.
+      //   - TODO: provide illustration.
+      // - Medial axis operations.
+      //   - This should computed for wall_offset[0].
+      //   - Each segment should be examined.
+      //     - Depths should be set to start_depth -
+      //     clearance_radius*cot(theta).
+      //     - If either end of the segment has depth above final_depth, it
+      //       should be rendered at least partially.
+      //       - If one end is below final depth, segment should be only
+      //         partially rendered, up to the point on the segment whose
+      //         depth equals final_depth.
+      // - Order female and/or male versions of operations as follows:
+      //   - Whether male or female is first depends on
+      //     "female_before_male_fixtures".
+      //   - 
+
+      if (enable_clearance_pocketing) {
+        double depth;
+        double offset;
+        for (int i=0; i < int(pocket_depths_array.size()); i++) {
+          dprintf("pocket_depths_array[%d]: %g ...\n", i, pocket_depths_array[i]);
+          depth = pocket_depths_array[i];
+          // Traverse inner pocketing loops from center outward.
+          for (int j = pocket_offsets_array.size() - 1; i<=j ; j--) {
+            offset = pocket_offsets_array[j];
+            loops = pocket_loop_array[j];
+            dprintf("pocket_offsets_array[%d]: %g ...\n", j, offset);
+            if (depth < 0.) {
+              python << GeneratePathFromOVDLoops(depth, start_depth, rapid_safety_space, offset, loops, ts, pMachineState, *this);
+            }
+          }
+        }
+      }
+
+      if (enable_wall_chamfering) {
+        double depth;
+        double offset;
+        for (unsigned int i=0; i < wall_depths_array.size(); i++) {
+          dprintf("wall_depths_array[%d]: %g ...\n", i, wall_depths_array[i]);
+          depth = wall_depths_array[i];
+          offset = wall_offsets_array[i];
+          loops = wall_loop_array[i];
+          if (depth < 0.) {
+            python << GeneratePathFromOVDLoops(depth, start_depth, rapid_safety_space, offset, loops, ts, pMachineState, *this);
+          }
+        }
+        // Draw the bottom wall chamfering loop.
+        depth = final_depth;
+        offset = bottom_wall_offset;
+        loops = bottom_wall_loops;
+        dprintf("bottom_wall: depth: %g, offset: %g, loops.size(): %d ...\n", depth, offset, int(loops.size()));
+        python << GeneratePathFromOVDLoops(depth, start_depth, rapid_safety_space, offset, loops, ts, pMachineState, *this);
+      }
+
+      // Corner pocketing
+      if (enable_corner_pocketing) {
+        // Offset to chamfering wall toolpath at tolerance_depth above
+        // final_depth. We want to use the diameter of the chamfer bit at
+        // tolerance_depth from the tip.
+        // = (chamfering bit diameter at peak_trough_tolerance) + (distance
+        //   from inlay plane to bottom depth, minus
+        //   peak_trough_tolerance)*tan_theta
+        // = 2*(chamfering_flat_radius + peak_trough_tolerance*tan_theta) +
+        //   (inlay_plane_depth - (final_trough_depth + peak_trough_depth))
+        double tolerance_depth = final_depth + peak_trough_tolerance;
+        //double tolerance_wall_offset = 2*(chamfering_flat_radius + peak_trough_tolerance*tan_theta) + (inlay_plane_depth - tolerance_depth)*tan_theta;
+
+        // Offset to clearance-pocket toolpath at tolerance_depth above final_depth. 
+        //double tolerance_pocket_offset = (inlay_plane_depth - tolerance_depth)*tan_theta + pocketing_flat_radius;
+
+        double tolerance_wall_offset = (inlay_plane_depth - tolerance_depth)*tan_theta;
+        double tolerance_chamfering_radius = peak_trough_tolerance*tan_theta;
+        double tolerance_chamfering_diameter = 2*tolerance_chamfering_radius;
+        double tolerance_wall_bit_offset = tolerance_wall_offset + tolerance_chamfering_radius;
+        double tolerance_wall_clearance_offset = tolerance_wall_offset + tolerance_chamfering_diameter;
+
+        double pocket_bit_offset = bottom_wall_offset + pocketing_flat_radius;
+        double scaled_pocket_bit_offset = pocket_bit_offset;
+
+        vd.filter_reset();
+        vd.filter(&pif);
+
+
+        // This constructs a CArea describing the region inside of the chamfer
+        // wall toolpath. This area is at height tolerance_depth. 
+        dprintf("ts.scale() ...\n");
+        double scaled_tolerance_wall_clearance_offset = tolerance_wall_clearance_offset;
+        ts.scale(scaled_tolerance_wall_clearance_offset);
+        dprintf("ofs.offset() ...\n");
+        //ovd::OffsetLoops tolerance_wall_loops = ofs.offset(tolerance_wall_offset);
+        ovd::OffsetLoops tolerance_wall_loops = ofs.offset(scaled_tolerance_wall_clearance_offset);
+        //dprintf("ChopLoops() ...\n");
+        //ChopLoops(tolerance_wall_loops, 20);
+        dprintf("CPocket::InvScaleOVDOffsetLoops() ...\n");
+        CPocket::InvScaleOVDOffsetLoops(tolerance_wall_loops, ts);
+        //CArea tolerance_area; 
+        //dprintf("CPocket::ConvertOVDLoopsToArea() ...\n");
+        //CPocket::ConvertOVDLoopsToArea(tolerance_area, tolerance_wall_loops);
+        //dprintf("tolerance_area.Reorder() ...\n");
+        //tolerance_area.Reorder();
+
+//python << GeneratePathFromOVDLoops(1, start_depth, 0, tolerance_wall_loops, pMachineState, *this);
+
+
+        // This constructs a CArea describing the region inside of the chamfer
+        // wall. This area is also at height tolerance_depth. 
+        dprintf("ts.scale() ...\n");
+        //ts.scale(tolerance_pocket_offset);
+        ts.scale(scaled_pocket_bit_offset);
+        dprintf("ofs.offset() ...\n");
+        //ovd::OffsetLoops tolerance_pocket_loops = ofs.offset(tolerance_pocket_offset);
+        ovd::OffsetLoops tolerance_pocket_loops = ofs.offset(scaled_pocket_bit_offset);
+
+        //dprintf("ChopLoops() ...\n");
+        //ChopLoops(tolerance_pocket_loops, 20);
+        //double scaled_pocketing_flat_radius = pocketing_flat_radius;
+        //ts.scale(scaled_pocketing_flat_radius);
+        //dprintf("OffsetOVDLoopsOutward() ...\n");
+        //OffsetOVDLoopsOutward(tolerance_pocket_loops, scaled_pocketing_flat_radius);
+
+        dprintf("CPocket::InvScaleOVDOffsetLoops() ...\n");
+        CPocket::InvScaleOVDOffsetLoops(tolerance_pocket_loops, ts);
+//python << GeneratePathFromOVDLoops(2, start_depth, 0, tolerance_pocket_loops, pMachineState, *this);
+        // Round the outer corners.
+        dprintf("OffsetOVDLoopsOutward() ...\n");
+        OffsetOVDLoopsOutward(tolerance_pocket_loops, pocketing_flat_radius);
+//python << GeneratePathFromOVDLoops(3, start_depth, 0, tolerance_pocket_loops, pMachineState, *this);
+
+        // Convert to area.
+        //CArea tolerance_pocket_area; 
+        //dprintf("CPocket::ConvertOVDLoopsToArea() ...\n");
+        //CPocket::ConvertOVDLoopsToArea(tolerance_pocket_area, tolerance_pocket_loops);
+        //dprintf("tolerance_area.Reorder() ...\n");
+        //tolerance_pocket_area.Reorder();
+
+
+        ////// Construct the difference between the two areas.
+        //dprintf("tolerance_area.Subtract() ...\n");
+        //tolerance_area.Subtract(tolerance_pocket_area);
+        ////dprintf("tolerance_area after subtract:\n");
+        ////CPocket::DetailArea(tolerance_area);
+        //dprintf("tolerance_area.Reorder() ...\n");
+        //tolerance_area.Reorder();
+        ////dprintf("tolerance_area after second reorder:\n");
+        ////CPocket::DetailArea(tolerance_area);
+
+        ////dprintf("tolerance_depth: %g\n", tolerance_depth);
+        ////dprintf("tolerance_wall_offset: %g\n", tolerance_wall_offset);
+        ////dprintf("tolerance_pocket_offset: %g\n", tolerance_pocket_offset);
+
+        TranslateScale boost_ts = ts;
+        boost_ts.c_x = boost_ts.min_x;
+        boost_ts.c_y = boost_ts.min_y;
+        boost_ts.s_x *= INT_MAX;
+        boost_ts.s_y *= INT_MAX;
+        boost_ts.s *= INT_MAX;
+        boost_ts.is_x /= INT_MAX;
+        boost_ts.is_y /= INT_MAX;
+        boost_ts.is /= INT_MAX;
+
+        CPocket::ScaleOVDOffsetLoops(tolerance_wall_loops, boost_ts);
+        CPocket::ScaleOVDOffsetLoops(tolerance_pocket_loops, boost_ts);
+
+        boost::polygon::polygon_set_data<int> boost_corner_pocket_loops;
+        boost_corner_pocket_loops.insert(tolerance_wall_loops.begin(), tolerance_wall_loops.end());
+
+        NestedLoop nested_tolerance_wall_loop;
+        int loop_id = 0;
+        {
+            int loops_size = tolerance_wall_loops.size();
+            dprintf("inserting %d loops into nested_tolerance_wall_loop ...\n", loops_size);
+            boost::progress_display show_progress(loops_size);
+            BOOST_FOREACH(ovd::OffsetLoop l, tolerance_wall_loops) {
+              ovd::OffsetLoop l_sans_arcs = CPocket::OVDLoopArcsToLines(l);
+              nested_tolerance_wall_loop.insert(l_sans_arcs, nested_tolerance_wall_loop.overlap_cache, loop_id++);
+              ++show_progress;;
+            }
+        }
+        dprintf(".. nested_tolerance_wall_loop.insert().\n");
+        //dprintf("Detail(nested_tolerance_wall_loop) ...\n");
+        //Detail(nested_tolerance_wall_loop);
+        //dprintf("...Detail(nested_tolerance_wall_loop).\n");
+
+        NestedLoop nested_tolerance_pocket_loop;
+        dprintf("nested_tolerance_pocket_loop.insert() ...\n");
+        loop_id = 0;
+        {
+            int loops_size = tolerance_pocket_loops.size();
+            dprintf("inserting %d loops into nested_tolerance_pocket_loop ...\n", loops_size);
+            boost::progress_display show_progress(loops_size);
+            BOOST_FOREACH(ovd::OffsetLoop l, tolerance_pocket_loops) {
+              ovd::OffsetLoop l_sans_arcs = CPocket::OVDLoopArcsToLines(l);
+              nested_tolerance_pocket_loop.insert(l_sans_arcs, nested_tolerance_pocket_loop.overlap_cache, loop_id++);
+              ++show_progress;;
+            }
+        }
+        dprintf(".. nested_tolerance_pocket_loop.insert().\n");
+        //dprintf("Detail(nested_tolerance_pocket_loop) ...\n");
+        //Detail(nested_tolerance_pocket_loop);
+        //dprintf("...Detail(nested_tolerance_pocket_loop).\n");
+
+        ovd::OffsetLoops unfiltered_corner_pocket_loops;
+        //unfiltered_corner_pocket_loops += tolerance_wall_loops - tolerance_pocket_loops;
+        {
+            int len = nested_tolerance_wall_loop.children.size();
+            dprintf("adding %d children to polygon dataset ...\n", len);
+            boost::progress_display show_progress(len);
+            BOOST_FOREACH(NestedLoop l, nested_tolerance_wall_loop.children) {
+              unfiltered_corner_pocket_loops += l;
+              ++show_progress;
+            }
+        }
+        {
+            int len = nested_tolerance_pocket_loop.children.size();
+            dprintf("subtracting %d children from polygon dataset ...\n", len);
+            boost::progress_display show_progress(len);
+            BOOST_FOREACH(NestedLoop l, nested_tolerance_pocket_loop.children) {
+              unfiltered_corner_pocket_loops -= l;
+              ++show_progress;
+            }
+        }
+        //unfiltered_corner_pocket_loops += nested_tolerance_wall_loop - nested_tolerance_pocket_loop;
+        //dprintf("Detail(unfiltered_corner_pocket_loops) ...\n");
+        //Detail(unfiltered_corner_pocket_loops);
+        //dprintf("...Detail(unfiltered_corner_pocket_loops).\n");
+        dprintf("cleaning ...\n");
+        gtl::polygon_set_data<int> cleaner;
+        cleaner += unfiltered_corner_pocket_loops;
+        cleaner.clean();
+        double simplify_distance_threshold = 0.01;
+        double scaled_simplify_distance_threshold = simplify_distance_threshold;
+        boost_ts.scale(scaled_simplify_distance_threshold);
+        int int_simplify_distance_threshold = round(scaled_simplify_distance_threshold);
+        simplify(cleaner, int_simplify_distance_threshold);
+        unfiltered_corner_pocket_loops.clear();
+        unfiltered_corner_pocket_loops += cleaner;
+        dprintf("... cleaning.\n");
+
+        CPocket::InvScaleOVDOffsetLoops(unfiltered_corner_pocket_loops, boost_ts);
+
+        CPocket::InvScaleOVDOffsetLoops(tolerance_wall_loops, boost_ts);
+        CPocket::InvScaleOVDOffsetLoops(tolerance_pocket_loops, boost_ts);
+//python << GeneratePathFromOVDLoops(4, start_depth, 0, tolerance_wall_loops, pMachineState, *this);
+//python << GeneratePathFromOVDLoops(5, start_depth, 0, tolerance_pocket_loops, pMachineState, *this);
+
+        //std::list<NestedLoop> q;
+
+        //q.push_back(nested_tolerance_wall_loop);
+        //while (0 < q.size()) {
+        //  NestedLoop nl = q.front();
+        //  q.pop_front();
+        //  python << GeneratePathFromOVDLoop(6, start_depth, 0, nl.loop, boost_ts, pMachineState, *this);
+        //  BOOST_FOREACH(NestedLoop child, nl.children) {
+        //    q.push_back(child);
+        //  }
+        //}
+
+        //q.push_back(nested_tolerance_pocket_loop);
+        //while (0 < q.size()) {
+        //  NestedLoop nl = q.front();
+        //  q.pop_front();
+        //  python << GeneratePathFromOVDLoop(7, start_depth, 0, nl.loop, boost_ts, pMachineState, *this);
+        //  BOOST_FOREACH(NestedLoop child, nl.children) {
+        //    q.push_back(child);
+        //  }
+        //}
+
+//python << GeneratePathFromOVDLoops(8, start_depth, 0, unfiltered_corner_pocket_loops, pMachineState, *this);
+
+
+        //// Convert back to OVD format.
+        //ovd::OffsetLoops unfiltered_corner_pocket_loops;
+        //dprintf("CPocket::ConvertOVDLoopsToArea() ...\n");
+        //CPocket::ConvertAreaToOVDLoops(tolerance_area, unfiltered_corner_pocket_loops);
+
+        dprintf("GeneratePathFromOVDLoops() ...\n");
+python << GeneratePathFromOVDLoops(final_depth, start_depth, 0, unfiltered_corner_pocket_loops, pMachineState, *this);
+
+        std::vector<double> corner_pocket_offsets_array;
+        std::vector<ovd::OffsetLoops> corner_pocket_loops_array;
+
+        //double corner_pocket_step_over = chamfering_flat_radius + peak_trough_tolerance*tan_theta;
+        double corner_pocket_step_over = chamfering_flat_radius + tolerance_chamfering_radius;
+        dprintf("corner_pocket_step_over: %g ...\n", corner_pocket_step_over);
+
+        int corner_pocket_loops_ct = unfiltered_corner_pocket_loops.size();
+        for (unsigned int i=0; i < corner_pocket_loops_ct; i++) {
+          dprintf("corner pocket loop %d/%d...\n", i, corner_pocket_loops_ct);
+          ovd::OffsetLoop loop = unfiltered_corner_pocket_loops[i];
+          //ovd::OffsetLoop loop_sans_arcs = CPocket::OVDLoopArcsToLines(loop, 12);
+          dprintf("(corner pocket loop %d/%d) loop size: %d...\n", i, corner_pocket_loops_ct, int(loop.size()));
+          //dprintf("(corner pocket loop %d/%d) loop sans arcs size: %d...\n", i, corner_pocket_loops_ct, int(loop_sans_arcs.size()));
+          //if (loop_sans_arcs.size() < 4) {
+          //    continue;
+          //}
+          //ChopLoop(loop_sans_arcs, 24);
+          //std::stringstream path_dump;
+          if (loop.size() < 4) { continue; }
+          ovd::OffsetLoops tmp_loops;
+          //tmp_loops.push_back(loop_sans_arcs);
+          tmp_loops.push_back(loop);
+//python << GeneratePathFromOVDLoops(8, 8, 0, tmp_loops, pMachineState, *this);
+          //DumpPathFromOVDLoops(8, 8, 0, tmp_loops, pMachineState, *this);
+          corner_pocket_loops_array.push_back(tmp_loops);
+          corner_pocket_offsets_array.push_back(0);
+
+          TranslateScale tmp_ts;
+          CPocket::GetOVDOffsetLoopsScaling(tmp_loops, tmp_ts);
+          CPocket::ScaleOVDOffsetLoops(tmp_loops, tmp_ts);
+
+          try {
+            ovd::VoronoiDiagram tmp_vd(2.,100);
+            tmp_vd.debug_off();
+            CPocket::AddOffsetLoopsToOVD(tmp_vd, tmp_loops);
+
+            tmp_vd.debug_off();
+            ovd::HEGraph& tmp_g = tmp_vd.get_graph_reference();
+            tmp_vd.debug_off();
+            ovd::Offset tmp_ofs(tmp_g);
+            tmp_vd.debug_off();
+            tmp_vd.filter_reset();
+            tmp_vd.debug_off();
+            tmp_vd.filter(&pif);
+
+            double corner_pocket_offset = corner_pocket_step_over;
+            double scaled_corner_pocket_offset = 0;
+            while (true) {
+              dprintf("corner_pocket_offset: %g ...\n", corner_pocket_offset);
+              scaled_corner_pocket_offset = corner_pocket_offset;
+              tmp_ts.scale(scaled_corner_pocket_offset);
+              dprintf("scaled_corner_pocket_offset : %g ...\n", scaled_corner_pocket_offset);
+
+              tmp_vd.debug_off();
+              tmp_loops = tmp_ofs.offset(scaled_corner_pocket_offset);
+              dprintf("tmp_loops.size() %d ...\n", int(tmp_loops.size()));
+
+              if (0 == tmp_loops.size()) { break; }
+              CPocket::InvScaleOVDOffsetLoops(tmp_loops, tmp_ts);
+              python << GeneratePathFromOVDLoops(final_depth, start_depth, 0, tmp_loops, pMachineState, *this);
+              corner_pocket_offset += corner_pocket_step_over;
+            }
+          }
+          catch (ovd::OVDFaceError e) {
+            std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": OVDFaceError while processing loop " << i << std::endl;
+            std::cout << "Details: " << e.what() << endl;
+          }
+          catch (ovd::OVDPrecisionError e) {
+            std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": OVDPrecisionError while processing loop " << i << std::endl;
+            std::cout << "Details: " << e.what() << endl;
+          }
+          catch (ovd::OVDError e) {
+            std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": OVDError while processing loop " << i << std::endl;
+            std::cout << "Details: " << e.what() << endl;
+          }
+          catch (std::exception e) {
+            std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": std::exception while processing loop " << i << std::endl;
+            std::cout << "Details: " << e.what() << endl;
+          }
+          catch (...) {
+            std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": Exception while processing loop " << i << std::endl;
+          }
+
+          //dprintf("tmp_ts: d: (%g,%g), s: %g\n", tmp_ts.d_x, tmp_ts.d_y, tmp_ts.s);
+          //try {
+          //  dprintf("ovd::VoronoiDiagram tmp_vd(2.,100) ...\n");
+          //  ovd::VoronoiDiagram tmp_vd(2.,100);
+          //  dprintf("AddOffsetLoopsToOVD() ...\n");
+          //  CPocket::AddOffsetLoopsToOVD(tmp_vd, tmp_loops);
+          //  dprintf("tmp_vd.get_graph_reference() ...\n");
+          //  //tmp_vd.debug_off();
+          //  ovd::HEGraph& tmp_g = tmp_vd.get_graph_reference();
+          //  dprintf("ovd::Offset tmp_ofs(tmp_g)) ...\n");
+          //  //tmp_vd.debug_off();
+          //  ovd::Offset tmp_ofs(tmp_g);
+          //  dprintf("tmp_vd.filter_reset() ...\n");
+          //  //tmp_vd.debug_off();
+          //  tmp_vd.filter_reset();
+          //  dprintf("PolygonInterior() ...\n");
+          //  tmp_vd.debug_off();
+          //  tmp_vd.filter(&pif);
+          //  //tmp_vd.filter(&pef);
+
+          //  dprintf("corner_pocket_step_over: %g ...\n", corner_pocket_step_over);
+          //  double corner_pocket_offset = corner_pocket_step_over;
+          //  std::cout << std::endl;
+          //  int i=0;
+          //  const char *clock = "|/-\\";
+          //  while (true) {
+          //    //std::cout << clock[i%4] << " " << i << "\r";
+          //    //std::cout.flush();
+          //    i++;
+          //    dprintf("corner_pocket_offset: %g ...\n", corner_pocket_offset);
+          //    double scaled_offset = corner_pocket_offset;
+          //    tmp_ts.scale(scaled_offset);
+          //    dprintf("scaled_offset: %g ...\n", scaled_offset);
+
+          //    dprintf("offset() ...\n");
+          //    tmp_vd.debug_off();
+          //    tmp_loops = tmp_ofs.offset(scaled_offset);
+          //    dprintf("tmp_loops.size() %d ...\n", int(tmp_loops.size()));
+          //    if (0 == tmp_loops.size()) { break; }
+          //    dprintf("InvScaleOVDOffsetLoops ...\n");
+          //    CPocket::InvScaleOVDOffsetLoops(tmp_loops, tmp_ts);
+          //    {
+          //      TranslateScale _ts;
+          //      CPocket::GetOVDOffsetLoopsScaling(tmp_loops, _ts);
+          //      if ((tmp_ts.d_x < _ts.d_x) || (tmp_ts.d_y < ts.d_y)) {
+          //        dprintf("offsetting in wrong direction!\n");
+          //        dprintf("original dx,dy: (%g,%g)\n", tmp_ts.d_x, tmp_ts.d_y);
+          //        dprintf("current dx,dy: (%g,%g)\n", _ts.d_x, _ts.d_y);
+          //        break;
+          //      }
+          //    }
+
+          //    dprintf("GeneratePathFromOVDLoops() ...\n");
+          //    python << GeneratePathFromOVDLoops(final_depth, start_depth, 0, tmp_loops, pMachineState, *this);
+          //    corner_pocket_loops_array.push_back(tmp_loops);
+          //    corner_pocket_offsets_array.push_back(corner_pocket_offset);
+
+          //    corner_pocket_offset += corner_pocket_step_over;
+          //  }
+          //  std::cout << std::endl;
+          //}
+          //catch (ovd::OVDFaceError e) {
+          //  std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": OVDFaceError while processing loop " << i << std::endl;
+          //  std::cout << "Details: " << e.what() << endl;
+          //}
+          //catch (ovd::OVDPrecisionError e) {
+          //  std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": OVDPrecisionError while processing loop " << i << std::endl;
+          //  std::cout << "Details: " << e.what() << endl;
+          //}
+          //catch (ovd::OVDError e) {
+          //  std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": OVDError while processing loop " << i << std::endl;
+          //  std::cout << "Details: " << e.what() << endl;
+          //}
+          //catch (std::exception e) {
+          //  std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": std::exception while processing loop " << i << std::endl;
+          //  std::cout << "Details: " << e.what() << endl;
+          //}
+          //catch (...) {
+          //  std::cout << "In " << __func__ << " at " __FILE__ << ":" << __LINE__ << ": Exception while processing loop " << i << std::endl;
+          //}
+        }
+      }
+
+      if (enable_medial_axis) {
+        double p[3], c[3];
+        dprintf("vd.filter_reset() ...\n");
+        vd.filter_reset();
+        dprintf("PolygonInterior() ...\n");
+        vd.filter(&pif);
+        dprintf("MedialAxis() ...\n");
+        vd.filter(&maf);
+        dprintf("MedialAxisEdgeWalk() ...\n");
+        ovd::MedialAxisEdgeWalk maw(g);
+
+        dprintf("walk() ...\n");
+        ovd::EdgeVectors toolpath = maw.walk();
+        dprintf("converting maw to toolpath) ...\n");
+
+        ovd::MedialChainList chain_list;
+        ovd::MedialChain chain;
+        ovd::MedialPointList move;
+        double s_delta_depth = -delta_depth/cot_theta;
+        ts.scale(s_delta_depth);
+        BOOST_FOREACH( ovd::EdgeVector edge_vec, toolpath ) {
+          chain = ovd::MedialChain();
+          BOOST_FOREACH( ovd::HEEdge e, edge_vec ) {
+            ovd::HEVertex v_src = g.source(e);
+            ovd::HEVertex v_trg = g.target(e);
+            double t_src = g[v_src].dist();
+            double t_trg = g[v_trg].dist();
+            double t_min = std::min(t_src,t_trg);
+            double t_max = std::max(t_src,t_trg);
+            t_min = std::min(t_min, s_delta_depth);
+            t_max = std::min(t_max, s_delta_depth);
+
+            move = ovd::MedialPointList();
+            //bool result = ovd::medial_points(g, e, move);
+
+            if (t_min < s_delta_depth) {
+              switch (g[e].type) {
+              // these edge-types are drawn as a single line from source to target.
+              case ovd::LINELINE:
+              case ovd::PARA_LINELINE: {
+                  if (t_src<=t_trg) {
+                    ovd::MedialPoint p_src( g[e].point(t_min), t_min);
+                    ovd::MedialPoint p_trg( g[e].point(t_max), t_max);
+                    move.push_back(p_src);
+                    move.push_back(p_trg);
+                  } else if (t_trg < t_src) {
+                    ovd::MedialPoint p_src( g[e].point(t_max), t_max);
+                    ovd::MedialPoint p_trg( g[e].point(t_min), t_min);
+                    move.push_back(p_src);
+                    move.push_back(p_trg);
+                  }
+                }
+                break;
+              // these edge-types are drawn as polylines with edge_points number of points
+              case ovd::PARABOLA:
+              case ovd::LINE: {
+                      int para_pts = 20;
+                      for (int n=0;n< para_pts;n++) {
+                          double t(0);
+                          // NOTE: quadratic t-dependence. More points at smaller t.
+                          if (t_src<=t_trg) // increasing t-value
+                              t = t_min + ((t_max-t_min)/ovd::numeric::sq(para_pts-1))*ovd::numeric::sq(n);
+                          else if (t_trg<t_src) { // decreasing t-value
+                              int m = para_pts-1-n; // m goes from (N-1)...0   as n goes from 0...(N-1)
+                              t = t_min + ((t_max-t_min)/ovd::numeric::sq(para_pts-1))*ovd::numeric::sq(m);
+                          }
+                          ovd::Point p = g[e].point(t);
+                          ovd::MedialPoint pt( p, t );
+                          move.push_back(pt);
+                      }
+                  }
+                  break;
+              default:
+                  break;
+              }
+              chain.push_back(move);
+            } else {
+              // entire edge is too low.
+              if (0 < int(chain.size())) {
+                chain_list.push_back(chain);
+                chain =  ovd::MedialChain();
+              }
+            }
+          }
+          if (0 < int(chain.size())) {
+            chain_list.push_back(chain);
+          }
+        }
+        python << _T("comment(") << PythonString(_("medial axis walk")) << _T(")\n");
+        python << rapid_to_clearance(pMachineState, this, p);
+
+        BOOST_FOREACH( ovd::MedialChain c, chain_list ) {
+          python << _T("comment(") << PythonString(_("medial axis")) << _T(")\n");
+          int n = 0;
+          BOOST_FOREACH( ovd::MedialPointList m, c ) {
+            BOOST_FOREACH( ovd::MedialPoint pt_dist, m ) { // loop through each Point/distance
+              ts.inv_scale_translate(pt_dist.p);
+              ts.inv_scale(pt_dist.clearance_radius);
+              p[0] = pt_dist.p.x;
+              p[1] = pt_dist.p.y;
+              //p[2] = start_depth - pt_dist.clearance_radius*cot_theta;
+              p[2] = inlay_plane_depth - pt_dist.clearance_radius*cot_theta;
+              if (n == 0) {
+                python << rapid_to_plunge(pMachineState, this, p);
+                //p[2] = start_depth + rapid_safety_space;
+                p[2] = inlay_plane_depth + rapid_safety_space;
+                python << rapid_plunge(pMachineState, this, p);
+                //p[2] = start_depth - pt_dist.clearance_radius*cot_theta;
+                p[2] = inlay_plane_depth - pt_dist.clearance_radius*cot_theta;
+                python << feed_to(pMachineState, this, p);
+              } else {
+                python << feed_to(pMachineState, this, p);
+              }
+              n++;
+            }
+          }
+          python << rapid_to_clearance(pMachineState, this, p);
+        }
+      }
+
     }
 
     // //double top_plane_depth = m_params
-    dprintf("flat_radius: %g\n", flat_radius);
-    dprintf("cutting_edge_angle: %g\n", cutting_edge_angle);
-    dprintf("chamfering_step_down: %g\n", chamfering_step_down);
+    dprintf("chamfering_flat_radius: %g\n", chamfering_flat_radius);
+    dprintf("chamfering_edge_angle: %g\n", chamfering_edge_angle);
+    dprintf("chamfering_edge_height: %g\n", chamfering_edge_height);
     dprintf("start_depth: %g\n", start_depth);
     dprintf("final_depth: %g\n", final_depth);
     dprintf("delta_depth: %g\n", delta_depth);
-    dprintf("step_down: %g\n", step_down);
+    dprintf("chamfering_step_down: %g\n", chamfering_step_down);
     dprintf("rapid_safety_space: %g\n", rapid_safety_space);
     dprintf("clearance_height: %g\n", clearance_height);
     dprintf("tan_theta: %g\n", tan_theta);
     dprintf("cot_theta: %g\n", cot_theta);
 
+    python << rapid_to_clearance(pMachineState, this);
+    return python;
+
     /* OpenVoronoi experiment. */
-    if (true) {
+    if (false) {
       ovd::VoronoiDiagram vd(2.,100);
       dprintf("... OpenVoronoi version: %s\n", ovd::version().c_str());
+  
+      ovd::polygon_interior_filter pef(false);
+      ovd::polygon_interior_filter pif(true);
+      ovd::medial_axis_filter maf(0.8);
 
       //ovd::Point p0(-0.1,-0.2);
       //ovd::Point p1(0.2,0.1);
@@ -595,9 +2466,11 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       dprintf("vd.get_graph_reference() ...\n");
       ovd::HEGraph& g = vd.get_graph_reference();
       dprintf("PolygonInterior() ...\n");
-      ovd::PolygonInterior pi(g, true);
+      //ovd::PolygonInterior pi(g, true);
+      vd.filter(&pif);
       dprintf("MedialAxis() ...\n");
-      ovd::MedialAxis ma(g, 0.9);
+      //ovd::MedialAxis ma(g, 0.9);
+      vd.filter(&maf);
       dprintf("MedialAxisEdgeWalk() ...\n");
       ovd::MedialAxisEdgeWalk maw(g);
 
@@ -680,7 +2553,7 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       }
 
       python << _T("comment(") << PythonString(_("medial axis walk")) << _T(")\n");
-      python << rapid_up_to_clearance(pMachineState, this, p);
+      python << rapid_to_clearance(pMachineState, this, p);
 
       BOOST_FOREACH( ovd::MedialChain c, chain_list ) {
         python << _T("comment(") << PythonString(_("medial axis")) << _T(")\n");
@@ -693,15 +2566,18 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
             p[1] = pt_dist.p.y;
             p[2] = start_depth - pt_dist.clearance_radius*cot_theta;
             if (n == 0) {
-              python << rapid_travel_to_next_plunge(pMachineState, this, p);
-              python << rapid_plunge_to_full_depth(pMachineState, this, p);
+              python << rapid_to_plunge(pMachineState, this, p);
+              // TODO:
+              // Rapid plunge to plunge depth.
+              // Feed from plunge depth to full depth.
+              python << rapid_plunge(pMachineState, this, p);
             } else {
               python << feed_to(pMachineState, this, p);
             }
             n++;
           }
         }
-        python << rapid_up_to_clearance(pMachineState, this, p);
+        python << rapid_to_clearance(pMachineState, this, p);
       }
 
       // BOOST_FOREACH( ovd::MedialChain chain, toolpath ) { // loop through each chain
@@ -773,92 +2649,125 @@ Python CInlay::AppendTextToProgram( CMachineState *pMachineState )
       dprintf("filter_reset() ....\n");
       vd.filter_reset();
       dprintf("PolygonInterior() ...\n");
-      ovd::PolygonInterior(g, true);
+      //ovd::PolygonInterior(g, true);
+      vd.filter(&pif);
       dprintf("Offset() ...\n");
       ovd::Offset ofs(g);
-      double step = step_down * tan_theta;
-      double scaled_step = step;
+      double scaled_step = chamfering_step_over;
       ts.scale(scaled_step);
-      ovd::OffsetLoops lops = ofs.offset(scaled_step);
-      dprintf("(offset %g) lops.size(): %d ..\n", step, int(lops.size()));
 
-      for(int i=1; 0 < lops.size(); lops = ofs.offset(scaled_step*++i)){
-        python << _T("comment('offset loop, t=") << i*step << _T("')\n");
-        dprintf("(offset %g) lops.size(): %d ...\n", i*step, int(lops.size()));
-        BOOST_FOREACH(ovd::OffsetLoop lop, lops){
+      std::vector<ovd::OffsetLoops> offset_list;
+      ovd::OffsetLoops loops = ofs.offset(0.);
+      dprintf("(offset %g) loops.size(): %d ...\n", chamfering_step_over, int(loops.size()));
+      offset_list.push_back(loops);
+      int depths_ct = 0;
+
+      double bottom_scaled_offset = scaled_step * (-delta_depth) / (chamfering_step_over*cot_theta);
+      ovd::OffsetLoops bottom_offset = ofs.offset(bottom_scaled_offset);
+
+      int i=0;
+      while (true) {
+        i++;
+        double loop_depth = start_depth-i*chamfering_step_over*cot_theta;
+        double scaled_offset = scaled_step*i;
+        dprintf("(offset %g) loops.size(): %d ...\n", scaled_offset, int(loops.size()));
+        loops = ofs.offset(scaled_offset);
+
+        if (!loops.size()) break;
+
+        if ((loop_depth < final_depth) && (depths_ct == 0) ) {
+            depths_ct = i;
+            // FIXME: Should check for difference between scaled_offset and
+            // bottom_scaled offset. If difference is less than some tolerance,
+            // we should note this, and decrement depths_ct.
+        }
+
+        offset_list.push_back(loops);
+      }
+
+      for (int i=0; i < depths_ct; i++) {
+        double loop_depth = start_depth-i*chamfering_step_over*cot_theta;
+        double scaled_offset = scaled_step*i;
+
+        loops = offset_list[i];
+        python << _T("comment('loops at offset t=") << scaled_offset << _T("')\n");
+        dprintf("(offset %g) loops.size(): %d ...\n", scaled_offset, int(loops.size()));
+        BOOST_FOREACH(ovd::OffsetLoop loop, loops){
           int n = 0;
-          dprintf("(offset %g) lop.size(): %d ...\n", i*step, int(lop.size()));
+          python << _T("comment('new loop at offset t=") << scaled_offset << _T("')\n");
+          dprintf("(offset %g) loop.size(): %d ...\n", scaled_offset, int(loop.size()));
           ovd::Point previous_pt;
-          BOOST_FOREACH(ovd::OffsetVertex ofv, lop){
-            //dprintf("vertex %i (%g,%g),%g,(%g,%g)%i ...\n", n, ofv.p.x, ofv.p.y, ofv.r, ofv.c.x, ofv.c.y, ofv.cw);
+          BOOST_FOREACH(ovd::OffsetVertex ofv, loop){
             ts.inv_scale_translate(ofv.p);
             p[0] = ofv.p.x;
             p[1] = ofv.p.y;
-            p[2] = start_depth-i*step*cot_theta;
-            //p[2] = start_depth - pt_dist.clearance_radius*cot_theta;
+            p[2] = loop_depth;
             if(n == 0){
-              python << rapid_up_to_clearance(pMachineState, this, p);
-              python << rapid_travel_to_next_plunge(pMachineState, this, p);
-              //{
-              //  // Rapid plunge to plunge depth.
-              //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
-              //  temp.SetZ(this->m_depth_op_params.ClearanceHeight()/theApp.m_program->m_units);
-              //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-              //  pMachineState->Location(temp);
-              //}
-              //{
-              //  // Feed from plunge depth to full depth.
-              //  CNCPoint temp(pMachineState->Fixture().Adjustment(p));
-              //  python << _T("rapid(x=") << temp.X(true) << _T(", y=") << temp.Y(true) << _T(", z=") << temp.Z(true) << _T(")\n");
-              //  pMachineState->Location(temp);
-              //}
-              python << rapid_plunge_to_full_depth(pMachineState, this, p);
+              python << rapid_to_clearance(pMachineState, this, p);
+              python << rapid_to_plunge(pMachineState, this, p);
+              // TODO:
+              // Rapid plunge to plunge depth.
+              // Feed from plunge depth to full depth.
+              python << rapid_plunge(pMachineState, this, p);
             } else {
-              CNCPoint cnc_pt(pMachineState->Fixture().Adjustment(p));
               if((ofv.r == -1.) || ((ofv.p - previous_pt).norm() <= 0.001)){
-                python
-                << _T("feed(x=")
-                << cnc_pt.X(true)
-                << _T(", y=")
-                << cnc_pt.Y(true)
-                << _T(", z=")
-                << cnc_pt.Z(true)
-                << _T(")\n");
+                // Line, or an arc so tiny we should treat it as a line.
+                python << feed_to(pMachineState, this, p);
               } else {
+                // Arc.
                 ts.inv_scale_translate(ofv.c);
                 ts.inv_scale(ofv.r);
                 c[0] = ofv.c.x;
                 c[1] = ofv.c.y;
-                c[2] = -i*step;
-                //python << _T("comment('arc p=") << p[0] << _T(",") << p[1] << _T(" r=") << ofv.r << _T(" c=") << c[0] << _T(",") << c[1] << _T(" cw=") << ofv.cw << _T("')\n");
-                CNCPoint cnc_ctr_pt(pMachineState->Fixture().Adjustment(c));
-                if(ofv.cw){ python << _T("arc_cw(x="); }
-                else { python << _T("arc_ccw(x="); }
-                python
-                << cnc_pt.X(true)
-                << _T(", y=")
-                << cnc_pt.Y(true)
-                << _T(", z=")
-                << cnc_pt.Z(true)
-                << _T(", i=")
-                << cnc_ctr_pt.X(true)
-                << _T(", j=")
-                << cnc_ctr_pt.Y(true)
-                //<< _T(", k=")
-                //<< cnc_ctr_pt.Z(true)
-                //<< _T(", r=")
-                //<< ofv.r
-                << _T(")\n");
+                c[2] = loop_depth;
+                python << arc_to(pMachineState, this, p, c, ofv.cw);
               }
-              pMachineState->Location(cnc_pt);
             }
             previous_pt = ofv.p;
             n++;
           }
         }
       }
+
+      python << _T("comment('bootom loops at offset t=") << bottom_scaled_offset << _T("')\n");
+      dprintf("(offset %g) bottom loops.size(): %d ...\n", bottom_scaled_offset, int(bottom_offset.size()));
+      BOOST_FOREACH(ovd::OffsetLoop loop, bottom_offset){
+        int n = 0;
+        python << _T("comment('new bottom loop at offset t=") << bottom_scaled_offset << _T("')\n");
+        dprintf("(offset %g) bottom loop.size(): %d ...\n", bottom_scaled_offset, int(loop.size()));
+        ovd::Point previous_pt;
+        BOOST_FOREACH(ovd::OffsetVertex ofv, loop){
+          ts.inv_scale_translate(ofv.p);
+          p[0] = ofv.p.x;
+          p[1] = ofv.p.y;
+          p[2] = final_depth;
+          if(n == 0){
+            python << rapid_to_clearance(pMachineState, this, p);
+            python << rapid_to_plunge(pMachineState, this, p);
+            // TODO:
+            // Rapid plunge to plunge depth.
+            // Feed from plunge depth to full depth.
+            python << rapid_plunge(pMachineState, this, p);
+          } else {
+            if((ofv.r == -1.) || ((ofv.p - previous_pt).norm() <= 0.001)){
+              // Line, or an arc so tiny we should treat it as a line.
+              python << feed_to(pMachineState, this, p);
+            } else {
+              // Arc.
+              ts.inv_scale_translate(ofv.c);
+              ts.inv_scale(ofv.r);
+              c[0] = ofv.c.x;
+              c[1] = ofv.c.y;
+              c[2] = final_depth;
+              python << arc_to(pMachineState, this, p, c, ofv.cw);
+            }
+          }
+          previous_pt = ofv.p;
+          n++;
+        }
+      }
     }
-    python << rapid_up_to_clearance(pMachineState, this);
+    python << rapid_to_clearance(pMachineState, this);
 
     return python;
 
@@ -1195,56 +3104,31 @@ Python CInlay::SelectFixture( CMachineState *pMachineState, const bool female_ha
     return(offset);
 }
 
-/* static */ Python CInlay::GeneratePathFromSketches(
-  std::list<HeeksObj *> &sketches,
+/* static */ Python CInlay::GeneratePathFromSketch(
+  HeeksObj *object,
   CMachineState *pMachineState,
   const double clearance_height,
   const double rapid_down_to_height,
   const double start_depth
 )
 {
-  dprintf("entered ...\n");
   Python python;
-  int num_children = sketches.size();
-  int child_num = 0;
-  dprintf("iterating through %d children ...\n", num_children);
-  for (std::list<HeeksObj *>::iterator it = sketches.begin(); it != sketches.end(); it++){
-    HeeksObj *object = *it;
-    child_num++;
-    dprintf("(child_num %d/%d) considering new child ...\n", child_num, num_children);
-    if (object->GetType() != SketchType) {
-      dprintf("(child_num %d/%d) skipping non-sketch child ...\n", child_num, num_children);
-      continue;
-    }
-  
+  if (object->GetType() == SketchType) {
     // Convert them to a list of wire objects.
-    dprintf("(child_num %d/%d) converting to list of wires ...\n", child_num, num_children);
     std::list<TopoDS_Shape> wires;
-    dprintf("(child_num %d/%d) ConvertSketchToFaceOrWire() ...\n", child_num, num_children);
     if (heeksCAD->ConvertSketchToFaceOrWire( object, wires, false))
     {
       // The wire(s) represent the sketch objects for a tool path.
-      int num_wires = wires.size();
-      int wire_num = 0;
       try {
         // For all wires in this sketch...
-        dprintf("(child_num %d/%d) iterating through %d wires ...\n", child_num, num_children, num_wires);
         for(std::list<TopoDS_Shape>::iterator It2 = wires.begin(); It2 != wires.end(); It2++) {
-          wire_num++;
-          dprintf("(child_num %d/%d) (wire_num %d/%d) fixing wire order ...\n", child_num, num_children, wire_num, num_wires);
           TopoDS_Shape& wire_to_fix = *It2;
           ShapeFix_Wire fix;
-          dprintf("(child_num %d/%d) (wire_num %d/%d) fix.Load(TopoDS::Wire(wire_to_fix)) ...\n", child_num, num_children, wire_num, num_wires);
           fix.Load( TopoDS::Wire(wire_to_fix) );
-          dprintf("(child_num %d/%d) (wire_num %d/%d) fix.FixReorder() ...\n", child_num, num_children, wire_num, num_wires);
           fix.FixReorder();
   
-          dprintf("(child_num %d/%d) (wire_num %d/%d) converting fix back to wire ...\n", child_num, num_children, wire_num, num_wires);
-          dprintf("(child_num %d/%d) (wire_num %d/%d) fix.Wire() ...\n", child_num, num_children, wire_num, num_wires);
           TopoDS_Shape shape = fix.Wire();
-          dprintf("(child_num %d/%d) (wire_num %d/%d) TopoDS::Wire(shape) ...\n", child_num, num_children, wire_num, num_wires);
           TopoDS_Wire wire = TopoDS::Wire(shape);
-          dprintf("(child_num %d/%d) (wire_num %d/%d) CContour::GeneratePathFromWire(...) ...\n", child_num, num_children, wire_num, num_wires);
           python << CContour::GeneratePathFromWire(
             wire,
             pMachineState,
@@ -1253,14 +3137,29 @@ Python CInlay::SelectFixture( CMachineState *pMachineState, const bool female_ha
             start_depth,
             CContourParams::ePlunge
           );
-          dprintf("(child_num %d/%d) (wire_num %d/%d) ... CContour::GeneratePathFromWire(...) done.\n", child_num, num_children, wire_num, num_wires);
         }
-        dprintf("(child_num %d/%d) ... done iterating through %d wires.\n", child_num, num_children, num_wires);
       } catch (Standard_Failure & error) {
         (void) error;	// Avoid the compiler warning.
         Handle_Standard_Failure e = Standard_Failure::Caught();
-  	  } // End catch
+  	  }
     }
+  }
+  return python;
+}
+
+/* static */ Python CInlay::GeneratePathFromSketches(
+  std::list<HeeksObj *> &sketches,
+  CMachineState *pMachineState,
+  const double clearance_height,
+  const double rapid_down_to_height,
+  const double start_depth
+)
+{
+  Python python;
+  for (std::list<HeeksObj *>::iterator it = sketches.begin(); it != sketches.end(); it++){
+    HeeksObj *object = *it;
+    if (object->GetType() != SketchType) { continue; }
+    GeneratePathFromSketch(object, pMachineState, clearance_height, rapid_down_to_height, start_depth);
   }
   dprintf("... done.\n");
   return python;
@@ -2744,7 +4643,7 @@ HeeksObj* CInlay::ReadFromXMLElement(TiXmlElement* element)
 	for(TiXmlElement* pElem = heeksCAD->FirstXMLChildElement( element ) ; pElem; pElem = pElem->NextSiblingElement())
 	{
 		std::string name(pElem->Value());
-		if(name == "params"){
+		if(name == "inlayop"){
 			new_object->m_params.ReadParametersFromXMLElement(pElem);
 			elements_to_remove.push_back(pElem);
 		}

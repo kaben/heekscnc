@@ -93,11 +93,12 @@ public:
      each other. Some nomenclature refers to this as a "90-degree" bit, and
      other nomenclature uses "45-degree" bit to mean the same thing.
    */
+	bool m_enable_clearance_pocketing;
+	bool m_enable_corner_pocketing;
+	bool m_enable_wall_chamfering;
+	bool m_enable_medial_axis;
 	double m_inlay_plane_depth;
-	double m_peak_depth;
-	double m_trough_depth;
-	double m_peak_clearance;
-	double m_trough_clearance;
+	double m_peak_trough_tolerance;
     // CTool *pChamferingBit = CTool::Find( m_tool_number );
     // double angle = pChamferingBit->m_params.m_cutting_edge_angle / 360.0 * 2.0 * PI;
     // double max_offset = (m_depth_op_params.m_start_depth - m_depth_op_params.m_final_depth) * tan(angle);
@@ -346,13 +347,21 @@ public:
 											const double clearance_height,
 											const double rapid_down_to_height );
 
-	static Python GeneratePathFromSketches(
-    std::list<HeeksObj *> &sketches,
-    CMachineState *pMachineState,
-    const double clearance_height,
-    const double rapid_down_to_height,
-    const double start_depth
-  );
+    static Python GeneratePathFromSketch(
+      HeeksObj *sketche,
+      CMachineState *pMachineState,
+      const double clearance_height,
+      const double rapid_down_to_height,
+      const double start_depth
+    );
+
+    static Python GeneratePathFromSketches(
+      std::list<HeeksObj *> &sketches,
+      CMachineState *pMachineState,
+      const double clearance_height,
+      const double rapid_down_to_height,
+      const double start_depth
+    );
 
 	static bool Clockwise( const gp_Circ & circle );
 	void ReloadPointers();

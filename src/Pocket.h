@@ -9,10 +9,11 @@
 #include "DepthOp.h"
 #include "CTool.h"
 
-namespace ovd {
-    class VoronoiDiagram;
-    class Point;
-};
+#include "openvoronoi/offset.hpp"
+#include "openvoronoi/voronoidiagram.hpp"
+
+#include <map>
+#include <utility>
 
 class CPocket;
 class CArea;
@@ -20,6 +21,49 @@ class CCurve;
 class CVertex;
 class Span;
 struct TranslateScale;
+
+struct Pts {
+    typedef std::map<double, ovd::Point> _PtMap;
+    typedef _PtMap::iterator _PtMapIter;
+    typedef std::map<double, _PtMap> PtMap;
+    typedef PtMap::iterator PtMapIter;
+    PtMap m_pts;
+    void add(double a, double b, ovd::Point& p){
+        m_pts[a][b] = p;
+    }
+    bool find(double a, double b, ovd::Point &p){
+        PtMapIter _pts(m_pts.find(a));
+        if (_pts == m_pts.end()) return false;
+        _PtMapIter pts(m_pts[a].find(b));
+        if (pts == m_pts[a].end()) return false;
+        p = m_pts[a][b];
+        return true;
+    }
+};
+
+struct PtIDs {
+    typedef std::map<double, int> IDMap;
+    typedef IDMap::iterator IDMapIter;
+    typedef std::map<double, IDMap> PtIDMap;
+    typedef PtIDMap::iterator PtIDMapIter;
+    PtIDMap pt_ids;
+    void add(double a, double b, int id){
+        pt_ids[a][b] = id;
+    }
+    bool find(double a, double b, int &result){
+        PtIDMapIter ids(pt_ids.find(a));
+        if (ids == pt_ids.end()) return false;
+        IDMapIter id(pt_ids[a].find(b));
+        if (id == pt_ids[a].end()) return false;
+        result = pt_ids[a][b];
+        return true;
+    }
+};
+
+typedef std::pair<int, int> SegID;
+typedef std::vector<SegID> SegIDs;
+typedef std::pair<ovd::Point, ovd::Point> Seg;
+typedef std::vector<Seg> Segs;
 
 class CPocketParams{
 public:
@@ -104,35 +148,40 @@ public:
 	static void ReadFromConfig();
 	static void WriteToConfig();
 
+	static bool SketchNeedsReordering(SketchOrderType order);
+
     static void DetailSpan(const Span &span);
     static void DetailVertex(const CVertex &vertex);
     static void DetailCurve(const CCurve &curve);
     static void DetailArea(const CArea &area);
-    // LibAREA conversion functions
-	static bool ConvertSketchesToArea(
-      std::list<HeeksObj *> &sketches,
-      CArea &area,
-      CMachineState *pMachineState
-    );
-	static bool ConvertSketchesToOVD(
-      std::list<HeeksObj *> &sketches,
-      ovd::VoronoiDiagram &vd,
-      TranslateScale &ts,
-      CMachineState *pMachineState
-    );
 
-	static bool ConvertCurveToSketch(
-      CCurve& curve,
-      HeeksObj *sketch,
-      CMachineState *pMachineState,
-      double z = 0.
-    );
-	static bool ConvertAreaToSketches(
-      CArea& area,
-      std::list<HeeksObj *> &sketches,
-      CMachineState *pMachineState,
-      double z = 0.
-    );
+    // LibAREA conversion functions
+    static int ConvertSketchToArea(HeeksObj *skch, CArea&, CMachineState*);
+	static bool ConvertSketchesToArea(std::list<HeeksObj *> &skchs, CArea&, CMachineState*);
+	static bool ConvertCurveToSketch(CCurve&, HeeksObj *skch, CMachineState*, double z=0);
+	static bool ConvertAreaToSketches(CArea&, std::list<HeeksObj *> &skchs, CMachineState*, double z=0);
+
+    static void OVDArcToLines(ovd::Point&, ovd::OffsetVertex&, ovd::OffsetLoop&, int steps_per_circle=0, double ds=0.1);
+    static ovd::OffsetLoop OVDLoopArcsToLines(ovd::OffsetLoop&, int steps_per_circle=0, double ds=0.1);
+
+	static bool ConvertSketchesToOVDOffsetLoops(std::list<HeeksObj *> &skchs, ovd::OffsetLoops&, CMachineState*);
+	static bool GetOVDOffsetLoopScaling(ovd::OffsetLoop&, TranslateScale &);
+	static bool GetOVDOffsetLoopsScaling(ovd::OffsetLoops&, TranslateScale &);
+	static bool ScaleOVDOffsetLoops(ovd::OffsetLoops&, TranslateScale &);
+	static bool InvScaleOVDOffsetLoops(ovd::OffsetLoops&, TranslateScale &);
+
+    static bool OVDFilterDuplicates(ovd::OffsetLoops&, Pts&, Segs&);
+    static bool SanitizeOVDLoops(ovd::OffsetLoops&, Pts&, Segs&);
+
+	static bool AddOffsetLoopsToOVD(ovd::VoronoiDiagram&, ovd::OffsetLoops&);
+	static bool ConvertSketchesToOVD(std::list<HeeksObj *> &skchs, ovd::VoronoiDiagram&, TranslateScale&, CMachineState*);
+    static bool ConvertOVDLoopToSketch(ovd::OffsetLoop&, HeeksObj *skch, double z);
+    static bool ConvertOVDLoopsToSketches(ovd::OffsetLoops&, std::list<HeeksObj *> &skchs, double z);
+
+	static bool ConvertCurveToOVDLoop(CCurve&, ovd::OffsetLoop&);
+	static bool ConvertOVDLoopToCurve(CCurve&, ovd::OffsetLoop&);
+	static bool ConvertAreaToOVDLoops(CArea&, ovd::OffsetLoops&);
+	static bool ConvertOVDLoopsToArea(CArea&, ovd::OffsetLoops&);
 
     /* Possibly implement, if they look like they're needed. */
     //static bool ConvertOVDMedialPointListToSketch(
@@ -158,10 +207,12 @@ public:
 
 struct TranslateScale {
     TranslateScale()
-    : bits(0)
+    : first(true)
+    , bits(0)
     , bits_power(1.)
     , inv_bits_power(1.)
     {}
+    bool first;
     double bits;
     double bits_power;
     double inv_bits_power;

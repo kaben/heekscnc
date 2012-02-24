@@ -32,7 +32,7 @@ include_directories (
     ${area_SOURCE_DIR}/kbool/src/
     ${OpenVoronoi_SOURCE_DIR}
     ${HeeksCadDir} ../kurve/geometry ../kurve/messages .
-    #${boost_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIR}
     )
 set ( LIBRARY_OUTPUT_PATH ../bin )
 
